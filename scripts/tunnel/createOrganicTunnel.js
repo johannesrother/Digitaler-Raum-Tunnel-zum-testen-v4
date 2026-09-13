@@ -4,6 +4,7 @@ import {
   getTunnelLook,
   getTunnelTwitchInterval,
 } from "./tunnelConfig.js";
+import { createTunnelVideoSkin } from "./createTunnelVideoSkin.js";
 
 const EYE_HEIGHT = 1.65;
 const PATH_SAMPLES = 188;
@@ -81,6 +82,7 @@ export function createOrganicTunnel(scene, options) {
   const { mesh, wallDeformation } = createTunnelShell(scene, route);
   const material = createTunnelMaterial(scene);
   mesh.material = material;
+  const videoSkin = createTunnelVideoSkin(scene, material);
   mesh.isPickable = false;
   mesh.receiveShadows = false;
   const lights = createTunnelLights(scene, [mesh], route);
@@ -107,6 +109,7 @@ export function createOrganicTunnel(scene, options) {
     route,
     setEnabled(enabled) {
       mesh.setEnabled(enabled);
+      if (!enabled) videoSkin.reset();
       lights.enabled = enabled;
       lights.points.forEach((light) => light.setEnabled(enabled));
       lights.fill.setEnabled(enabled);
@@ -114,6 +117,7 @@ export function createOrganicTunnel(scene, options) {
       lights.whiteRoomSpill.setEnabled(enabled);
     },
     update(tunnelTime) {
+      videoSkin.update(tunnelTime);
       sequenceActive = true;
       // The walls may already be visible and moving through the rift. Keep
       // that motion continuous when the travel clock begins instead of
@@ -133,6 +137,7 @@ export function createOrganicTunnel(scene, options) {
     setSequenceActive(active) {
       sequenceActive = active;
       if (!active) {
+        videoSkin.reset();
         activeTime = 0;
         impulse = 0;
         updateTunnelMembraneMaterial(material, 0);
@@ -140,6 +145,7 @@ export function createOrganicTunnel(scene, options) {
       }
     },
     reset() {
+      videoSkin.reset();
       sequenceActive = false;
       activeTime = 0;
       impulse = 0;
@@ -150,6 +156,7 @@ export function createOrganicTunnel(scene, options) {
       updateTunnelLights(lights, route, 0, 0);
     },
     dispose() {
+      videoSkin.dispose();
       scene.onBeforeRenderObservable.remove(observer);
       lights.points.forEach((light) => light.dispose());
       lights.fill.dispose();
