@@ -25,10 +25,10 @@ const PORTAL_VISIBLE_THRESHOLD = 0.01;
 const RIFT_APERTURE_MASK_DEPTH = -0.145;
 const ENTRY_ROUTE_EASE_DURATION = 0.75;
 const TUNNEL_TIC_START = 5;
-const TUNNEL_TIC_PEAK = 0.045;
-const TUNNEL_TIC_COUNTER_END = 0.11;
-const TUNNEL_TIC_DURATION = 0.28;
-const TUNNEL_TIC_ANGLE = BABYLON.Tools.ToRadians(12);
+const TUNNEL_TIC_SECOND_PEAK = 0.31;
+const TUNNEL_TIC_DURATION = 0.82;
+const TUNNEL_TIC_ANGLES = [9, 14, 7].map((angle) => BABYLON.Tools.ToRadians(angle));
+const TUNNEL_TIC_REST_ANGLES = [2, 1.5].map((angle) => BABYLON.Tools.ToRadians(angle));
 const VIDEO_13_PREPARE_AT = 3.25;
 const FLASH_DEBUG_PRE_ENTRY_MS = 2000;
 const FLASH_DEBUG_POST_ENTRY_MS = 3000;
@@ -211,7 +211,8 @@ export function createIdyllTunnelTransition(scene, options) {
         video13Prepared = true;
         options.tunnel.prepareVideo13();
       }
-      if (!video13Switched && tunnelEntryElapsed >= TUNNEL_TIC_START + TUNNEL_TIC_PEAK) {
+      if (!video13Switched
+        && tunnelEntryElapsed >= TUNNEL_TIC_START + TUNNEL_TIC_SECOND_PEAK) {
         video13Switched = true;
         options.tunnel.switchToVideo13();
       }
@@ -477,18 +478,42 @@ function applyPathTransform(root, route, time, initialHeading, delta) {
 function tunnelCameraTicYaw(timeSinceCrossing) {
   const time = timeSinceCrossing - TUNNEL_TIC_START;
   if (time < 0 || time >= TUNNEL_TIC_DURATION) return 0;
-  if (time < TUNNEL_TIC_PEAK) {
-    return TUNNEL_TIC_ANGLE * (time / TUNNEL_TIC_PEAK);
+
+  if (time < 0.045) {
+    return BABYLON.Scalar.Lerp(0, TUNNEL_TIC_ANGLES[0], time / 0.045);
   }
-  if (time < TUNNEL_TIC_COUNTER_END) {
-    const amount = (time - TUNNEL_TIC_PEAK)
-      / (TUNNEL_TIC_COUNTER_END - TUNNEL_TIC_PEAK);
-    return BABYLON.Scalar.Lerp(TUNNEL_TIC_ANGLE, -TUNNEL_TIC_ANGLE * 0.22, amount);
+  if (time < 0.12) {
+    return BABYLON.Scalar.Lerp(
+      TUNNEL_TIC_ANGLES[0],
+      TUNNEL_TIC_REST_ANGLES[0],
+      (time - 0.045) / 0.075,
+    );
   }
-  const returnAmount = smoothstep(
-    (time - TUNNEL_TIC_COUNTER_END) / (TUNNEL_TIC_DURATION - TUNNEL_TIC_COUNTER_END),
-  );
-  return BABYLON.Scalar.Lerp(-TUNNEL_TIC_ANGLE * 0.22, 0, returnAmount);
+  if (time < 0.255) return TUNNEL_TIC_REST_ANGLES[0];
+  if (time < TUNNEL_TIC_SECOND_PEAK) {
+    return BABYLON.Scalar.Lerp(
+      TUNNEL_TIC_REST_ANGLES[0],
+      TUNNEL_TIC_ANGLES[1],
+      (time - 0.255) / 0.055,
+    );
+  }
+  if (time < 0.43) {
+    return BABYLON.Scalar.Lerp(
+      TUNNEL_TIC_ANGLES[1],
+      TUNNEL_TIC_REST_ANGLES[1],
+      (time - TUNNEL_TIC_SECOND_PEAK) / 0.12,
+    );
+  }
+  if (time < 0.525) return TUNNEL_TIC_REST_ANGLES[1];
+  if (time < 0.565) {
+    return BABYLON.Scalar.Lerp(
+      TUNNEL_TIC_REST_ANGLES[1],
+      TUNNEL_TIC_ANGLES[2],
+      (time - 0.525) / 0.04,
+    );
+  }
+  const returnAmount = smoothstep((time - 0.565) / (TUNNEL_TIC_DURATION - 0.565));
+  return BABYLON.Scalar.Lerp(TUNNEL_TIC_ANGLES[2], 0, returnAmount);
 }
 
 function calmTravelProgress(amount) {
