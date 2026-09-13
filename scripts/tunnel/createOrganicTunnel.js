@@ -134,6 +134,12 @@ export function createOrganicTunnel(scene, options) {
       }
       updateTunnelLights(lights, route, activeTime, impulse * (0.25 + look.detail * 0.75));
     },
+    prepareVideo13() {
+      videoSkin.prepareSource13();
+    },
+    switchToVideo13() {
+      videoSkin.switchToSource13();
+    },
     setSequenceActive(active) {
       sequenceActive = active;
       if (!active) {

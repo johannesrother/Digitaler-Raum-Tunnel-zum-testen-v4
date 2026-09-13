@@ -2,32 +2,14 @@ import { getIdyllSaturation } from "../environment/createIdyllDesaturation.js";
 
 const VIDEO_OPACITY = 0.66;
 
-/** One muted video texture blended across the existing continuous tunnel shell. */
+/** Two prepared sources share one material mapping on the continuous tunnel shell. */
 export function createTunnelVideoSkin(scene, material) {
-  const video = document.createElement("video");
-  // Playback starts automatically with tunnel entry, never during the Rift preview.
-  video.autoplay = false;
-  video.muted = true;
-  video.defaultMuted = true;
-  video.loop = true;
-  video.playsInline = true;
-  video.preload = "auto";
-  video.src = new URL("../../assets/videos/14.mp4", import.meta.url).href;
-
-  const texture = new BABYLON.VideoTexture(
-    "tunnel-interior-video-14",
-    video,
-    scene,
-    false,
-    true,
-    BABYLON.Texture.BILINEAR_SAMPLINGMODE,
-    { autoPlay: false, loop: true, muted: true, autoUpdateTexture: true },
-  );
-  texture.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
-  texture.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
-
+  const source14 = createVideoSource(scene, 14);
+  const source13 = createVideoSource(scene, 13);
   let active = false;
-  let hasFrame = false;
+  let source13Started = false;
+  let switchRequested = false;
+  let useSource13 = false;
   let tunnelTime = 0;
   let generation = 0;
 
@@ -38,30 +20,41 @@ export function createTunnelVideoSkin(scene, material) {
 
     getClassName() { return "TunnelVideoSkinPlugin"; }
 
-    getSamplers(samplers) { samplers.push("tunnelVideoSkinSampler"); }
+    getSamplers(samplers) {
+      samplers.push("tunnelVideo14Sampler", "tunnelVideo13Sampler");
+    }
 
-    getActiveTextures(textures) { textures.push(texture); }
+    getActiveTextures(textures) {
+      textures.push(source14.texture, source13.texture);
+    }
 
-    hasTexture(candidate) { return candidate === texture; }
+    hasTexture(candidate) {
+      return candidate === source14.texture || candidate === source13.texture;
+    }
 
     getUniforms() {
       return {
-        ubo: [{ name: "tunnelVideoSkinState", size: 2, type: "vec2" }],
-        fragment: "uniform vec2 tunnelVideoSkinState;",
+        ubo: [{ name: "tunnelVideoSkinState", size: 3, type: "vec3" }],
+        fragment: "uniform vec3 tunnelVideoSkinState;",
       };
     }
 
     bindForSubMesh(buffer) {
-      if (active && video.readyState >= 2 && texture.isReady()) {
-        texture.update();
-        hasFrame = true;
+      updateSourceFrame(source14, active && !useSource13);
+      updateSourceFrame(source13, active && source13Started);
+      if (switchRequested && source13.hasFrame && !useSource13) {
+        useSource13 = true;
+        source14.video.pause();
       }
-      buffer.updateFloat2(
+      const visibleSourceReady = useSource13 ? source13.hasFrame : source14.hasFrame;
+      buffer.updateFloat3(
         "tunnelVideoSkinState",
-        active && hasFrame ? VIDEO_OPACITY : 0,
+        active && visibleSourceReady ? VIDEO_OPACITY : 0,
         getIdyllSaturation(tunnelTime),
+        useSource13 ? 1 : 0,
       );
-      buffer.setTexture("tunnelVideoSkinSampler", texture);
+      buffer.setTexture("tunnelVideo14Sampler", source14.texture);
+      buffer.setTexture("tunnelVideo13Sampler", source13.texture);
     }
 
     getCustomCode(stage) {
@@ -78,7 +71,8 @@ export function createTunnelVideoSkin(scene, material) {
       if (stage !== "fragment") return null;
       return {
         CUSTOM_FRAGMENT_DEFINITIONS: `varying vec3 vTunnelVideoSkinCoord;
-          uniform sampler2D tunnelVideoSkinSampler;`,
+          uniform sampler2D tunnelVideo14Sampler;
+          uniform sampler2D tunnelVideo13Sampler;`,
         CUSTOM_FRAGMENT_MAIN_END: `
           float tunnelVideoAlpha = tunnelVideoSkinState.x;
           if (tunnelVideoAlpha > 0.0001) {
@@ -86,9 +80,13 @@ export function createTunnelVideoSkin(scene, material) {
               clamp(vTunnelVideoSkinCoord.x, 0.0, 1.0),
               fract(atan(vTunnelVideoSkinCoord.z, vTunnelVideoSkinCoord.y) / 6.2831853 + 1.0)
             );
-            vec3 tunnelVideoLinear = toLinearSpace(
-              texture2D(tunnelVideoSkinSampler, tunnelVideoUV).rgb
-            );
+            vec3 tunnelVideoSample14 = texture2D(tunnelVideo14Sampler, tunnelVideoUV).rgb;
+            vec3 tunnelVideoSample13 = texture2D(tunnelVideo13Sampler, tunnelVideoUV).rgb;
+            vec3 tunnelVideoLinear = toLinearSpace(mix(
+              tunnelVideoSample14,
+              tunnelVideoSample13,
+              tunnelVideoSkinState.z
+            ));
             float tunnelVideoLuma = dot(
               tunnelVideoLinear,
               vec3(0.2126, 0.7152, 0.0722)
@@ -118,14 +116,25 @@ export function createTunnelVideoSkin(scene, material) {
 
   new TunnelVideoSkinPlugin();
 
+  const playSource = (source, label) => {
+    source.video.autoplay = true;
+    const run = generation;
+    source.video.play().catch((error) => {
+      if (active && run === generation) {
+        console.error(`TUNNEL VIDEO ${label} PLAY ERROR`, error);
+      }
+    });
+  };
+
   const reset = () => {
     generation += 1;
     active = false;
-    hasFrame = false;
+    source13Started = false;
+    switchRequested = false;
+    useSource13 = false;
     tunnelTime = 0;
-    video.autoplay = false;
-    video.pause();
-    if (video.currentTime !== 0) video.currentTime = 0;
+    resetSource(source14);
+    resetSource(source13);
   };
 
   return {
@@ -134,20 +143,69 @@ export function createTunnelVideoSkin(scene, material) {
       tunnelTime = time;
       if (active) return;
       active = true;
-      video.autoplay = true;
-      const run = ++generation;
-      video.play().catch((error) => {
-        if (active && run === generation) {
-          console.error("TUNNEL VIDEO 14 PLAY ERROR", error);
-        }
-      });
+      generation += 1;
+      playSource(source14, 14);
+    },
+    prepareSource13() {
+      if (!active || source13Started) return;
+      source13Started = true;
+      playSource(source13, 13);
+    },
+    switchToSource13() {
+      if (!active || useSource13 || switchRequested) return;
+      switchRequested = true;
+      if (!source13Started) {
+        source13Started = true;
+        playSource(source13, 13);
+      }
     },
     reset,
     dispose() {
       reset();
-      texture.dispose();
-      video.removeAttribute("src");
-      video.load();
+      disposeSource(source14);
+      disposeSource(source13);
     },
   };
+}
+
+function createVideoSource(scene, number) {
+  const video = document.createElement("video");
+  video.autoplay = false;
+  video.muted = true;
+  video.defaultMuted = true;
+  video.loop = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.src = new URL(`../../assets/videos/${number}.mp4`, import.meta.url).href;
+  const texture = new BABYLON.VideoTexture(
+    `tunnel-interior-video-${number}`,
+    video,
+    scene,
+    false,
+    true,
+    BABYLON.Texture.BILINEAR_SAMPLINGMODE,
+    { autoPlay: false, loop: true, muted: true, autoUpdateTexture: true },
+  );
+  texture.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
+  texture.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
+  return { video, texture, hasFrame: false };
+}
+
+function updateSourceFrame(source, shouldUpdate) {
+  if (!shouldUpdate || source.video.readyState < 2 || !source.texture.isReady()) return;
+  source.texture.update();
+  source.hasFrame = true;
+}
+
+function resetSource(source) {
+  source.hasFrame = false;
+  source.video.autoplay = false;
+  source.video.pause();
+  if (source.video.currentTime !== 0) source.video.currentTime = 0;
+}
+
+function disposeSource(source) {
+  source.texture.dispose();
+  source.video.removeAttribute("src");
+  source.video.load();
 }
