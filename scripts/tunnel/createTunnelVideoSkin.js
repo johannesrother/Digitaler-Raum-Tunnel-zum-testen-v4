@@ -80,13 +80,13 @@ export function createTunnelVideoSkin(scene, material) {
               clamp(vTunnelVideoSkinCoord.x, 0.0, 1.0),
               fract(atan(vTunnelVideoSkinCoord.z, vTunnelVideoSkinCoord.y) / 6.2831853 + 1.0)
             );
-            vec3 tunnelVideoSample14 = texture2D(tunnelVideo14Sampler, tunnelVideoUV).rgb;
-            vec3 tunnelVideoSample13 = texture2D(tunnelVideo13Sampler, tunnelVideoUV).rgb;
-            vec3 tunnelVideoLinear = toLinearSpace(mix(
-              tunnelVideoSample14,
-              tunnelVideoSample13,
-              tunnelVideoSkinState.z
-            ));
+            vec3 tunnelVideoSample;
+            if (tunnelVideoSkinState.z > 0.5) {
+              tunnelVideoSample = texture2D(tunnelVideo13Sampler, tunnelVideoUV).rgb;
+            } else {
+              tunnelVideoSample = texture2D(tunnelVideo14Sampler, tunnelVideoUV).rgb;
+            }
+            vec3 tunnelVideoLinear = toLinearSpace(tunnelVideoSample);
             float tunnelVideoLuma = dot(
               tunnelVideoLinear,
               vec3(0.2126, 0.7152, 0.0722)
@@ -184,7 +184,7 @@ function createVideoSource(scene, number) {
     false,
     true,
     BABYLON.Texture.BILINEAR_SAMPLINGMODE,
-    { autoPlay: false, loop: true, muted: true, autoUpdateTexture: true },
+    { autoPlay: false, loop: true, muted: true, autoUpdateTexture: false },
   );
   texture.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
   texture.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
@@ -193,7 +193,7 @@ function createVideoSource(scene, number) {
 
 function updateSourceFrame(source, shouldUpdate) {
   if (!shouldUpdate || source.video.readyState < 2 || !source.texture.isReady()) return;
-  source.texture.update();
+  source.texture.updateTexture(true);
   source.hasFrame = true;
 }
 

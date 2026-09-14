@@ -3,6 +3,7 @@ import { setStatus } from "../utils/dom.js";
 const IMMERSIVE_VR = "immersive-vr";
 const LOCAL_FLOOR = "local-floor";
 const LOCAL = "local";
+const XR_FRAMEBUFFER_SCALE = 0.8;
 
 /**
  * Adds an optional WebXR entry path without affecting desktop rendering.
@@ -89,11 +90,22 @@ function showVrUnavailable(enterVrButton) {
 }
 
 async function enterImmersiveVr(xr) {
+  const engine = xr.sessionManager.scene.getEngine();
+  const renderTarget = xr.sessionManager.getWebXRRenderTarget({
+    canvasElement: engine.getRenderingCanvas(),
+    canvasOptions: {
+      antialias: true,
+      depth: true,
+      stencil: engine.isStencilEnable,
+      alpha: true,
+      framebufferScaleFactor: XR_FRAMEBUFFER_SCALE,
+    },
+  });
   try {
-    await xr.enterXRAsync(IMMERSIVE_VR, LOCAL_FLOOR);
+    await xr.enterXRAsync(IMMERSIVE_VR, LOCAL_FLOOR, renderTarget);
   } catch (localFloorError) {
     // A few WebXR implementations lack local-floor; keep a safe VR fallback.
     console.info("local-floor ist nicht verfügbar; WebXR startet mit lokalem Referenzraum.", localFloorError);
-    await xr.enterXRAsync(IMMERSIVE_VR, LOCAL);
+    await xr.enterXRAsync(IMMERSIVE_VR, LOCAL, renderTarget);
   }
 }

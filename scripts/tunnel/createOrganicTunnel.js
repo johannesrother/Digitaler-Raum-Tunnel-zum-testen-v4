@@ -578,13 +578,13 @@ function createTunnelMaterial(scene) {
   material.alpha = TUNNEL_MEMBRANE_ALPHA_START;
   material.transparencyMode = BABYLON.Material.MATERIAL_ALPHABLEND;
   // A depth pre-pass would occlude the opaque idyll before this transparent
-  // shell is blended. Render back and front faces separately instead, keeping
-  // the landscape in the color buffer while limiting unordered self-overdraw.
+  // shell is blended. Its authored winding already faces inward, so one
+  // culling pass is sufficient for the visitor inside the tunnel.
   material.needDepthPrePass = false;
   material.forceDepthWrite = false;
   material.backFaceCulling = true;
   material.twoSidedLighting = true;
-  material.separateCullingPass = true;
+  material.separateCullingPass = false;
   material.clearCoat.isEnabled = true;
   material.clearCoat.intensity = 0.34;
   material.clearCoat.roughness = 0.3;
