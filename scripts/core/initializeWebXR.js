@@ -9,7 +9,7 @@ const LOCAL = "local";
  */
 export async function initializeWebXR({ scene, enterVrButton, statusElement, onEntered }) {
   if (!navigator.xr) {
-    enterVrButton.hidden = true;
+    showVrUnavailable(enterVrButton);
     setStatus(statusElement, "WebXR ist in diesem Browser nicht verfügbar. Desktop-Test aktiv.");
     return null;
   }
@@ -20,7 +20,7 @@ export async function initializeWebXR({ scene, enterVrButton, statusElement, onE
     );
 
     if (!immersiveVrSupported) {
-      enterVrButton.hidden = true;
+      showVrUnavailable(enterVrButton);
       setStatus(statusElement, "Immersives VR wird hier nicht unterstützt. Desktop-Test aktiv.");
       return null;
     }
@@ -38,7 +38,7 @@ export async function initializeWebXR({ scene, enterVrButton, statusElement, onE
     setStatus(statusElement, "WebXR bereit. VR kann betreten werden.");
     return xr;
   } catch (error) {
-    enterVrButton.hidden = true;
+    showVrUnavailable(enterVrButton);
     console.warn("WebXR konnte nicht initialisiert werden; der Desktop-Test bleibt verfügbar.", error);
     setStatus(statusElement, "WebXR konnte nicht vorbereitet werden. Desktop-Test aktiv.");
     return null;
@@ -46,8 +46,10 @@ export async function initializeWebXR({ scene, enterVrButton, statusElement, onE
 }
 
 function enableVrEntry({ xr, enterVrButton, statusElement, onEntered }) {
+  delete enterVrButton.dataset.xrUnavailable;
   enterVrButton.hidden = false;
   enterVrButton.disabled = false;
+  enterVrButton.textContent = "VR betreten";
 
   xr.onStateChangedObservable.add((state) => {
     const inVr = state === BABYLON.WebXRState.IN_XR;
@@ -56,24 +58,34 @@ function enableVrEntry({ xr, enterVrButton, statusElement, onEntered }) {
     if (inVr) {
       setStatus(statusElement, "VR ist aktiv.");
     } else if (!enterVrButton.disabled) {
+      enterVrButton.textContent = "VR betreten";
       setStatus(statusElement, "WebXR bereit. VR kann betreten werden.");
     }
   });
 
   enterVrButton.addEventListener("click", async () => {
     enterVrButton.disabled = true;
+    enterVrButton.textContent = "VR wird gestartet…";
     setStatus(statusElement, "VR-Session wird gestartet …");
 
     try {
       await enterImmersiveVr(xr);
       onEntered?.();
     } catch (error) {
-      console.warn("Die VR-Session konnte nicht gestartet werden.", error);
+      enterVrButton.textContent = "VR erneut versuchen";
+      console.error("Die immersive VR-Session konnte nicht gestartet werden.", error);
       setStatus(statusElement, "VR-Session konnte nicht gestartet werden. Desktop-Test aktiv.");
     } finally {
       enterVrButton.disabled = false;
     }
   });
+}
+
+function showVrUnavailable(enterVrButton) {
+  enterVrButton.dataset.xrUnavailable = "true";
+  enterVrButton.hidden = false;
+  enterVrButton.disabled = true;
+  enterVrButton.textContent = "VR nicht verfügbar";
 }
 
 async function enterImmersiveVr(xr) {

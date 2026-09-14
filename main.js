@@ -30,6 +30,9 @@ async function startExperience() {
     });
   };
   const startRun = ({ resetTransition = false } = {}) => {
+    if (enterVrButton.dataset.xrUnavailable === "true") {
+      enterVrButton.hidden = true;
+    }
     reexperienceButton.hide();
     resetReexperienceState();
     if (resetTransition) {
