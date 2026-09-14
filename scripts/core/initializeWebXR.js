@@ -7,8 +7,9 @@ const LOCAL = "local";
 /**
  * Adds an optional WebXR entry path without affecting desktop rendering.
  */
-export async function initializeWebXR({ scene, enterVrButton, statusElement }) {
+export async function initializeWebXR({ scene, enterVrButton, statusElement, onEntered }) {
   if (!navigator.xr) {
+    enterVrButton.hidden = true;
     setStatus(statusElement, "WebXR ist in diesem Browser nicht verfügbar. Desktop-Test aktiv.");
     return null;
   }
@@ -19,6 +20,7 @@ export async function initializeWebXR({ scene, enterVrButton, statusElement }) {
     );
 
     if (!immersiveVrSupported) {
+      enterVrButton.hidden = true;
       setStatus(statusElement, "Immersives VR wird hier nicht unterstützt. Desktop-Test aktiv.");
       return null;
     }
@@ -32,18 +34,20 @@ export async function initializeWebXR({ scene, enterVrButton, statusElement }) {
       xrCamera.position.y = 0;
     });
 
-    enableVrEntry({ xr, enterVrButton, statusElement });
+    enableVrEntry({ xr, enterVrButton, statusElement, onEntered });
     setStatus(statusElement, "WebXR bereit. VR kann betreten werden.");
     return xr;
   } catch (error) {
+    enterVrButton.hidden = true;
     console.warn("WebXR konnte nicht initialisiert werden; der Desktop-Test bleibt verfügbar.", error);
     setStatus(statusElement, "WebXR konnte nicht vorbereitet werden. Desktop-Test aktiv.");
     return null;
   }
 }
 
-function enableVrEntry({ xr, enterVrButton, statusElement }) {
+function enableVrEntry({ xr, enterVrButton, statusElement, onEntered }) {
   enterVrButton.hidden = false;
+  enterVrButton.disabled = false;
 
   xr.onStateChangedObservable.add((state) => {
     const inVr = state === BABYLON.WebXRState.IN_XR;
@@ -62,6 +66,7 @@ function enableVrEntry({ xr, enterVrButton, statusElement }) {
 
     try {
       await enterImmersiveVr(xr);
+      onEntered?.();
     } catch (error) {
       console.warn("Die VR-Session konnte nicht gestartet werden.", error);
       setStatus(statusElement, "VR-Session konnte nicht gestartet werden. Desktop-Test aktiv.");

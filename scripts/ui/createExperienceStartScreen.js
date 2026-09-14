@@ -8,11 +8,29 @@ export function createExperienceStartScreen() {
   const message = document.getElementById("experience-start-message");
   const button = document.getElementById("start-experience");
   let ready = false;
+  let startRequested = false;
   let startHandler = null;
+
+  const start = () => {
+    if (!ready || !startHandler) {
+      startRequested = true;
+      return;
+    }
+    ready = false;
+    startRequested = false;
+    button.disabled = true;
+    startHandler();
+    screen.classList.add("experience-start-screen--leaving");
+    screen.addEventListener("transitionend", () => screen.remove(), { once: true });
+  };
 
   const setReady = (onStart) => {
     ready = true;
     startHandler = onStart;
+    if (startRequested) {
+      start();
+      return;
+    }
     message.classList.add("experience-start-message--hidden");
     button.hidden = false;
     button.disabled = false;
@@ -20,18 +38,12 @@ export function createExperienceStartScreen() {
   };
 
   button.addEventListener("click", () => {
-    if (!ready || !startHandler) {
-      return;
-    }
-    ready = false;
-    button.disabled = true;
-    startHandler();
-    screen.classList.add("experience-start-screen--leaving");
-    screen.addEventListener("transitionend", () => screen.remove(), { once: true });
+    start();
   });
 
   return {
     setReady,
+    requestStart: start,
     showError() {
       message.textContent = "EXPERIENCE COULD NOT LOAD";
       message.classList.remove("experience-start-message--hidden");

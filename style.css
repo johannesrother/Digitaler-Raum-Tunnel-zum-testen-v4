@@ -165,6 +165,23 @@ body {
   display: none;
 }
 
+body:has(.experience-start-screen:not(.experience-start-screen--leaving)) .runtime-panel {
+  top: calc(50% + 2.5rem);
+  right: auto;
+  bottom: auto;
+  left: 50%;
+  z-index: 1001;
+  width: min(19rem, calc(100% - 3rem));
+  padding: 0;
+  transform: translateX(-50%);
+  background: transparent;
+  border: 0;
+}
+
+body:has(.experience-start-screen:not(.experience-start-screen--leaving)) #enter-vr {
+  margin-top: 0;
+}
+
 #enter-vr {
   width: 100%;
   margin-top: 0.65rem;

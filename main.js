@@ -71,15 +71,15 @@ async function startExperience() {
   // Rendering prepares the paused initial view, but the experience timeline
   // itself remains gated until the explicit start.
   engine.runRenderLoop(() => scene.render());
-  await scene.whenReadyAsync();
-  setStatus(statusElement, "Idylle bereit. WebXR wird geprüft …");
-
+  setStatus(statusElement, "WebXR wird vorbereitet …");
   const xr = await initializeWebXR({
     scene,
     enterVrButton,
     statusElement,
+    onEntered: () => startScreen.requestStart(),
   });
   scene.metadata.transition.attachWebXR(xr);
+  await scene.whenReadyAsync();
   startScreen.setReady(() => {
     // This direct click is also the browser gesture for the existing HTML
     // audio elements. The timeline is reset and begins here at exactly t = 0.
