@@ -60,6 +60,8 @@ export function createIdyllTunnelTransition(scene, options) {
     : null;
   let elapsed = 0;
   let xrCamera = null;
+  let xrHelper = null;
+  let xrInitialPoseObserver = null;
   let previousWorldHidden = false;
   let idyllHidden = false;
   let portalClosed = false;
@@ -306,6 +308,22 @@ export function createIdyllTunnelTransition(scene, options) {
       if (!xr) {
         return;
       }
+      xrHelper = xr;
+      xrInitialPoseObserver = xr.onInitialXRPoseSetObservable.add((camera) => {
+        // Babylon initially copies the desktop camera's WORLD transform into
+        // the XR camera. This camera is parented to the already world-positioned
+        // locomotion root, so keep only the desktop camera's local base heading;
+        // the XR reference space adds tracked head height, movement and rotation.
+        xrCamera = camera;
+        xrCamera.parent = root;
+        xrCamera.position.set(0, 0, 0);
+        BABYLON.Quaternion.FromEulerAnglesToRef(
+          0,
+          initialCameraRotation.y,
+          0,
+          xrCamera.rotationQuaternion,
+        );
+      });
       xr.onStateChangedObservable.add((state) => {
         const isInXr = state === BABYLON.WebXRState.IN_XR;
         if (isInXr) {
@@ -329,6 +347,9 @@ export function createIdyllTunnelTransition(scene, options) {
       options.desktopCamera.parent = null;
       if (xrCamera) {
         xrCamera.parent = null;
+      }
+      if (xrHelper && xrInitialPoseObserver) {
+        xrHelper.onInitialXRPoseSetObservable.remove(xrInitialPoseObserver);
       }
       debug.dispose();
       flashDebug.dispose();
