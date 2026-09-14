@@ -1,4 +1,5 @@
 const RIFT_SOUND_VOLUME = 0.8;
+const AUDIO_FADE_STEP_MS = 16;
 const RIFT_SOUND_URL = new URL(
   "../../assets/sounds/477648__erokia__traveling-into-a-black-hole.wav",
   import.meta.url,
@@ -57,7 +58,7 @@ export function createRiftSound() {
       const progress = Math.min(1, (performance.now() - startedAt) / (duration * 1000));
       riftAudio.volume = from * (1 - progress);
       if (progress < 1) {
-        fadeFrame = window.requestAnimationFrame(update);
+        fadeFrame = window.setTimeout(update, AUDIO_FADE_STEP_MS);
         return;
       }
       riftAudio.pause();
@@ -70,7 +71,7 @@ export function createRiftSound() {
   };
 
   const stop = () => {
-    if (fadeFrame !== null) window.cancelAnimationFrame(fadeFrame);
+    if (fadeFrame !== null) window.clearTimeout(fadeFrame);
     fadeFrame = null;
     started = false;
     riftAudio.pause();

@@ -5,6 +5,7 @@ const IDYLL_DUCK_DURATION = 2;
 const HEARTBEAT_VOLUME = 0.4;
 const HEARTBEAT_FADE_DURATION = 1.5;
 const HEARTBEAT_URL = new URL("../../assets/sounds/Herzschlag.wav", import.meta.url);
+const AUDIO_FADE_STEP_MS = 16;
 
 /** Global, looping background sound for the idyll only. */
 export function createIdyllSound() {
@@ -48,7 +49,7 @@ export function createIdyllSound() {
   };
 
   const cancelStressFade = () => {
-    if (stressFrame !== null) window.cancelAnimationFrame(stressFrame);
+    if (stressFrame !== null) window.clearTimeout(stressFrame);
     stressFrame = null;
   };
 
@@ -98,7 +99,7 @@ export function createIdyllSound() {
         idyllAudio.volume = from + (IDYLL_DUCKED_VOLUME - from) * smooth(elapsed / IDYLL_DUCK_DURATION);
         heartbeatAudio.volume = HEARTBEAT_VOLUME * smooth(elapsed / HEARTBEAT_FADE_DURATION);
         stressFrame = elapsed < Math.max(IDYLL_DUCK_DURATION, HEARTBEAT_FADE_DURATION)
-          ? window.requestAnimationFrame(update) : null;
+          ? window.setTimeout(update, AUDIO_FADE_STEP_MS) : null;
       };
       update();
     },
@@ -115,7 +116,7 @@ export function createIdyllSound() {
         idyllAudio.volume = from * (1 - progress);
         heartbeatAudio.volume = heartbeatFrom * (1 - progress);
         if (progress < 1) {
-          fadeFrame = window.requestAnimationFrame(update);
+          fadeFrame = window.setTimeout(update, AUDIO_FADE_STEP_MS);
           return;
         }
         this.stop();
@@ -133,7 +134,7 @@ export function createIdyllSound() {
       started = false;
       removeStartListeners();
       if (fadeFrame !== null) {
-        window.cancelAnimationFrame(fadeFrame);
+        window.clearTimeout(fadeFrame);
         fadeFrame = null;
       }
       idyllAudio.pause();

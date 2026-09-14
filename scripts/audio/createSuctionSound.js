@@ -1,4 +1,5 @@
 const SUCTION_SOUND_VOLUME = 0.8;
+const AUDIO_FADE_STEP_MS = 16;
 const SUCTION_SOUND_URL = new URL(
   "../../assets/sounds/186674__katdhamphir__creepy-wind-suction.wav",
   import.meta.url,
@@ -21,7 +22,7 @@ export function createSuctionSound() {
       const progress = Math.min(1, (performance.now() - startedAt) / (duration * 1000));
       suctionAudio.volume = from * (1 - progress);
       if (progress < 1) {
-        fadeFrame = window.requestAnimationFrame(update);
+        fadeFrame = window.setTimeout(update, AUDIO_FADE_STEP_MS);
         return;
       }
       suctionAudio.pause();
@@ -34,7 +35,7 @@ export function createSuctionSound() {
   };
 
   const stop = () => {
-    if (fadeFrame !== null) window.cancelAnimationFrame(fadeFrame);
+    if (fadeFrame !== null) window.clearTimeout(fadeFrame);
     fadeFrame = null;
     started = false;
     suctionAudio.pause();

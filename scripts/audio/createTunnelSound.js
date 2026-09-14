@@ -1,6 +1,7 @@
 export const TUNNEL_SOUND_VOLUME = 0.8;
 
 const TUNNEL_SOUND_DURATION = 60;
+const AUDIO_FADE_STEP_MS = 16;
 const TUNNEL_SOUND_URL = new URL(
   "../../assets/sounds/667735__theojt__mysterious-ambiance-music.wav",
   import.meta.url,
@@ -51,11 +52,11 @@ export function createTunnelSound() {
     tunnelAudio.pause();
     tunnelAudio.currentTime = 0;
     if (fadeInFrame !== null) {
-      window.cancelAnimationFrame(fadeInFrame);
+      window.clearTimeout(fadeInFrame);
       fadeInFrame = null;
     }
     if (volumeFadeFrame !== null) {
-      window.cancelAnimationFrame(volumeFadeFrame);
+      window.clearTimeout(volumeFadeFrame);
       volumeFadeFrame = null;
     }
   };
@@ -70,7 +71,7 @@ export function createTunnelSound() {
       const progress = Math.min(1, (performance.now() - startedAt) / (duration * 1000));
       tunnelAudio.volume = TUNNEL_SOUND_VOLUME * progress;
       if (progress < 1) {
-        fadeInFrame = window.requestAnimationFrame(update);
+        fadeInFrame = window.setTimeout(update, AUDIO_FADE_STEP_MS);
       } else {
         fadeInFrame = null;
       }
@@ -85,7 +86,7 @@ export function createTunnelSound() {
       const progress = Math.min(1, (performance.now() - startedAt) / (duration * 1000));
       tunnelAudio.volume = from + (target - from) * progress;
       if (progress < 1) {
-        volumeFadeFrame = window.requestAnimationFrame(update);
+        volumeFadeFrame = window.setTimeout(update, AUDIO_FADE_STEP_MS);
       } else {
         volumeFadeFrame = null;
       }
