@@ -1,6 +1,5 @@
 export const TUNNEL_SOUND_VOLUME = 0.8;
 
-const TUNNEL_SOUND_DURATION = 60;
 const AUDIO_FADE_STEP_MS = 16;
 const TUNNEL_SOUND_URL = new URL(
   "../../assets/sounds/667735__theojt__mysterious-ambiance-music.wav",
@@ -19,7 +18,6 @@ export function createTunnelSound() {
   let unlocked = false;
   let unlocking = false;
   let started = false;
-  let stopTimer = null;
   let watchdogTimer = null;
   let resumePending = false;
   let lastPlaybackTime = 0;
@@ -45,10 +43,6 @@ export function createTunnelSound() {
     // never revive it after the White Room transition or disposal.
     started = false;
     disableWatchdog();
-    if (stopTimer !== null) {
-      window.clearTimeout(stopTimer);
-      stopTimer = null;
-    }
     tunnelAudio.pause();
     tunnelAudio.currentTime = 0;
     if (fadeInFrame !== null) {
@@ -218,7 +212,6 @@ export function createTunnelSound() {
         console.info("TUNNEL WAV PLAY OK");
         enableWatchdog();
         fadeIn(fadeInDuration);
-        stopTimer = window.setTimeout(stop, TUNNEL_SOUND_DURATION * 1000);
       }).catch((error) => {
         started = false;
         console.error("TUNNEL WAV ERROR:", error);

@@ -29,9 +29,9 @@ export function createReexperienceButton(onRestart) {
     revealTimer = window.setTimeout(() => {
       revealTimer = null;
       overlay.hidden = false;
-      window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
         overlay.classList.add("reexperience-overlay--visible");
-      });
+      }, 0);
       overlay.setAttribute("aria-hidden", "false");
       button.focus({ preventScroll: true });
     }, 5000);

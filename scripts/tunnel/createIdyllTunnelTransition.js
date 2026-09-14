@@ -121,7 +121,10 @@ export function createIdyllTunnelTransition(scene, options) {
     }
     flashDebug.nextFrame();
     const frameTime = performance.now();
-    const delta = Math.min((frameTime - previousFrameTime) / 1000, 0.04);
+    const elapsedDelta = Math.max(0, (frameTime - previousFrameTime) / 1000);
+    // Keep rotational smoothing bounded after a dropped frame, while the
+    // authoritative experience clock continues in real time at every FPS.
+    const delta = Math.min(elapsedDelta, 0.04);
     previousFrameTime = frameTime;
     // Remove the prior frame's temporary head-tic offset before the existing
     // path controller computes its regular, unmodified heading.
@@ -129,8 +132,8 @@ export function createIdyllTunnelTransition(scene, options) {
       root.rotation.y = normalizeAngle(root.rotation.y - previousTunnelTicYaw);
       previousTunnelTicYaw = 0;
     }
-    if (tunnelEntryPrepared) tunnelEntryElapsed += delta;
-    elapsed += delta;
+    if (tunnelEntryPrepared) tunnelEntryElapsed += elapsedDelta;
+    elapsed += elapsedDelta;
     const riftFormation = smoothstep((elapsed - RIFT_FORM_START) / (IDYLL_TRAVEL_DURATION - RIFT_FORM_START));
     const tunnelReveal = smoothstep((elapsed - RIFT_TUNNEL_REVEAL_START) / (IDYLL_TRAVEL_DURATION - RIFT_TUNNEL_REVEAL_START));
     const tunnelElapsed = elapsed - TUNNEL_START;
