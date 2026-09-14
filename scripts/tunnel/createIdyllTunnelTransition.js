@@ -309,7 +309,7 @@ export function createIdyllTunnelTransition(scene, options) {
       xr.onStateChangedObservable.add((state) => {
         const isInXr = state === BABYLON.WebXRState.IN_XR;
         if (isInXr) {
-          xrCamera = xr.baseExperience.camera;
+          xrCamera = xr.camera;
           xrCamera.parent = root;
           syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading, riftApproachTime);
           return;
