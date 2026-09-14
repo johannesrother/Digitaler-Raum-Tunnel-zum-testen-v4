@@ -2,7 +2,7 @@ const WHITE_ROOM_SOUND_VOLUME = 0.8;
 const WHITE_ROOM_FADE_OUT_SECONDS = 5;
 const AUDIO_FADE_STEP_MS = 16;
 const WHITE_ROOM_SOUND_URL = new URL(
-  "../../assets/sounds/82078__kapanoush__sinus-aditive.aiff",
+  "../../assets/sounds/82078__kapanoush__sinus-aditive.wav",
   import.meta.url,
 );
 
