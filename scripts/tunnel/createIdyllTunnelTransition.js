@@ -88,9 +88,6 @@ export function createIdyllTunnelTransition(scene, options) {
   const start = options.startPosition.clone();
   const entry = createEntryPath(start, options.entrance, options.initialForward, options.tunnel.route.start);
   const tunnelRoute = createTunnelTravelRoute(entry, options.tunnel.route, options.entrance.center);
-  const groundedTunnelEndPosition = tunnelRoute.endPosition.add(
-    options.tunnel.cameraFloorOffsetAt(tunnelRoute.tunnelProgressAt(tunnelRoute.duration)),
-  );
   const tunnelWorld = createTunnelWorldGroup(scene, options);
   const rift = createSpacetimeRift(
     scene,
@@ -208,13 +205,12 @@ export function createIdyllTunnelTransition(scene, options) {
       applyPathTransform(root, tunnelRoute, riftApproachTime + (tunnelRoute.entryTime - riftApproachTime)
         * riftPullProgress(elapsed - IDYLL_TRAVEL_DURATION, tunnelRoute, riftApproachTime), initialHeading, delta);
     } else if (!hasReachedWhiteRoom) {
-      applyTunnelPathTransform(
+      applyPathTransform(
         root,
         tunnelRoute,
         tunnelRoute.entryTime + tunnelTravelTime(tunnelTime, tunnelRoute, riftApproachTime),
         initialHeading,
         delta,
-        options.tunnel,
       );
       options.tunnel.update(tunnelTime);
       options.onTunnelUpdate?.(tunnelTime);
@@ -225,14 +221,14 @@ export function createIdyllTunnelTransition(scene, options) {
       activateWhiteRoom(options, root);
       const whiteElapsed = tunnelElapsed - TUNNEL_DURATION;
       const releaseStartSpeed = tunnelRoute.normalTunnelSpeed * finalTunnelSpeedMultiplier();
-      const releaseDistance = BABYLON.Vector3.Distance(groundedTunnelEndPosition, options.whiteRoom.finalPosition);
+      const releaseDistance = BABYLON.Vector3.Distance(tunnelRoute.endPosition, options.whiteRoom.finalPosition);
       const releaseStartSlope = BABYLON.Scalar.Clamp(
         releaseStartSpeed * WHITE_ROOM_ARRIVAL_DURATION / Math.max(releaseDistance, 0.001),
         0.15,
         1.45,
       );
       const arrival = finalReleaseProgress(whiteElapsed / WHITE_ROOM_ARRIVAL_DURATION, releaseStartSlope);
-      root.position.copyFrom(BABYLON.Vector3.Lerp(groundedTunnelEndPosition, options.whiteRoom.finalPosition, arrival));
+      root.position.copyFrom(BABYLON.Vector3.Lerp(tunnelRoute.endPosition, options.whiteRoom.finalPosition, arrival));
       if (!previousWorldHidden && whiteElapsed >= WHITE_ROOM_ARRIVAL_DURATION) {
         isolatePreviousWorld(options);
         previousWorldHidden = true;
@@ -391,14 +387,14 @@ export function createIdyllTunnelTransition(scene, options) {
         if (isInXr) {
           xrCamera = xr.camera;
           xrCamera.parent = root;
-          syncRootToExperienceTime(root, elapsed, tunnelRoute, options.tunnel, options.whiteRoom, initialHeading, riftApproachTime);
+          syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading, riftApproachTime);
           return;
         }
         if (xrCamera) {
           xrCamera.parent = null;
           xrCamera = null;
         }
-        syncRootToExperienceTime(root, elapsed, tunnelRoute, options.tunnel, options.whiteRoom, initialHeading, riftApproachTime);
+        syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading, riftApproachTime);
       });
     },
     dispose() {
@@ -455,14 +451,7 @@ function createTunnelTravelRoute(entryPath, tunnelRoute, entranceCenter) {
       points.push(tunnelRoute.positionAt(index / 188 * 0.986));
     }
   }
-  const route = createPolylineRoute(points, closestDistanceAlongPolyline(points, entranceCenter));
-  const finalTunnelDistance = tunnelRoute.distanceAtProgress(0.986);
-  route.tunnelProgressAt = (time) => tunnelRoute.progressAtDistance(BABYLON.Scalar.Clamp(
-    route.distanceAt(time) - route.entryDistance,
-    0,
-    finalTunnelDistance,
-  ));
-  return route;
+  return createPolylineRoute(points, closestDistanceAlongPolyline(points, entranceCenter));
 }
 
 function createPolylineRoute(points, entranceDistance) {
@@ -563,11 +552,6 @@ function applyPathTransform(root, route, time, initialHeading, delta) {
   const desiredYaw = normalizeAngle(headingFrom(route.tangentAt(time)) - initialHeading);
   const smoothing = 1 - Math.exp(-Math.max(0, delta) * 2.6);
   root.rotation.y = lerpAngle(root.rotation.y, desiredYaw, smoothing);
-}
-
-function applyTunnelPathTransform(root, route, time, initialHeading, delta, tunnel) {
-  applyPathTransform(root, route, time, initialHeading, delta);
-  root.position.addInPlace(tunnel.cameraFloorOffsetAt(route.tunnelProgressAt(time)));
 }
 
 function tunnelCameraTicOffset(timeSinceCrossing, result) {
@@ -1061,7 +1045,7 @@ function isolatePreviousWorld(options) {
   options.previousWorldLights.forEach((light) => light.setEnabled(false));
 }
 
-function syncRootToExperienceTime(root, elapsed, tunnelRoute, tunnel, whiteRoom, initialHeading, riftApproachTime) {
+function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initialHeading, riftApproachTime) {
   if (elapsed < IDYLL_TRAVEL_DURATION) {
     applyPathTransform(root, tunnelRoute, riftApproachTime * calmTravelProgress(elapsed / IDYLL_TRAVEL_DURATION), initialHeading, 0);
     return;
@@ -1073,13 +1057,12 @@ function syncRootToExperienceTime(root, elapsed, tunnelRoute, tunnel, whiteRoom,
   }
   const tunnelTime = elapsed - TUNNEL_START;
   if (tunnelTime < TUNNEL_DURATION) {
-    applyTunnelPathTransform(
+    applyPathTransform(
       root,
       tunnelRoute,
       tunnelRoute.entryTime + tunnelTravelTime(tunnelTime, tunnelRoute, riftApproachTime),
       initialHeading,
       0,
-      tunnel,
     );
     return;
   }

@@ -6,7 +6,6 @@ import {
 } from "./tunnelConfig.js";
 import { createTunnelVideoSkin } from "./createTunnelVideoSkin.js";
 
-const EYE_HEIGHT = 1.65;
 const PATH_SAMPLES = 188;
 // Eight extra radial samples are reserved for the higher-curvature fin tips;
 // the path sampling remains unchanged so this is a small, silhouette-focused
@@ -26,7 +25,6 @@ const ENTRY_BACKLIGHT_RANGE = 34;
 const TUNNEL_MEMBRANE_ALPHA_START = 0.18;
 const TUNNEL_MEMBRANE_ALPHA_MID = 0.28;
 const TUNNEL_MEMBRANE_ALPHA_END = 0.37;
-const CAMERA_FLOOR_BIAS = 0.62;
 // Existing morph fields remain deliberately uneven so they do not read as one
 // synchronized tube pulse. Values are moderate and still safety-clamped.
 const WALL_MOTION_AMPLITUDES = [1.1, 1.2, 1.02, 1.16, 1.07, 1.13];
@@ -108,20 +106,6 @@ export function createOrganicTunnel(scene, options) {
   return {
     mesh,
     route,
-    cameraFloorOffsetAt(progress) {
-      const clampedProgress = BABYLON.Scalar.Clamp(progress, 0, 1);
-      const time = clampedProgress * TUNNEL_DURATION;
-      const look = getTunnelLook(time);
-      const bottomRadius = getFinalFunnelDiameter(time) * 0.5
-        * organicProfile(Math.PI * 1.5, clampedProgress, look.detail);
-      const localVertical = route.frameAt(clampedProgress).vertical;
-      // Preserve the established entrance height, then move the locomotion
-      // base toward the real local underside as the shell closes around it.
-      // Scaling by the live bottom radius keeps the camera safely inside the
-      // 30 cm terminal opening while retaining a clear floor relationship.
-      const grounding = smoothstep((clampedProgress - 0.04) / 0.9);
-      return localVertical.scale(-bottomRadius * CAMERA_FLOOR_BIAS * grounding);
-    },
     setEnabled(enabled) {
       mesh.setEnabled(enabled);
       if (!enabled) videoSkin.reset();
@@ -288,12 +272,7 @@ function createTunnelShell(scene, route) {
 
   for (let section = 0; section <= PATH_SAMPLES; section += 1) {
     const progress = section / PATH_SAMPLES;
-    const time = progress * TUNNEL_DURATION;
-    const center = route.positionAt(progress);
-    center.y += EYE_HEIGHT;
-    const { lateral, vertical } = route.frameAt(progress);
-    const diameter = getFinalFunnelDiameter(time);
-    const look = getTunnelLook(time);
+    const { center, lateral, vertical, diameter, look, time } = getTunnelSectionFrame(route, progress);
 
     for (let side = 0; side < PROFILE_SIDES; side += 1) {
       const angle = (side / PROFILE_SIDES) * Math.PI * 2;
@@ -338,6 +317,20 @@ function createTunnelShell(scene, route) {
     mesh,
     wallDeformation: createWallDeformation(scene, mesh, positions, indices, deformationVertices),
   };
+}
+
+function getTunnelSectionFrame(route, progress) {
+  const clampedProgress = BABYLON.Scalar.Clamp(progress, 0, 1);
+  const time = clampedProgress * TUNNEL_DURATION;
+  const frame = route.frameAt(clampedProgress);
+  const diameter = getFinalFunnelDiameter(time);
+  const look = getTunnelLook(time);
+  const bottomRadius = diameter * 0.5
+    * organicProfile(Math.PI * 1.5, clampedProgress, look.detail);
+  // The route is the local floor datum. Moving the section center by its
+  // current bottom radius makes only the ceiling descend as the shell narrows.
+  const center = frame.position.add(frame.vertical.scale(bottomRadius));
+  return { ...frame, center, diameter, look, time };
 }
 
 /**
@@ -623,10 +616,10 @@ function updateTunnelMembraneMaterial(material, time) {
 }
 
 function createTunnelLights(scene, meshes, route) {
-  const entranceFrame = route.frameAt(0);
-  const entryBacklightPosition = entranceFrame.position
+  const entranceFrame = getTunnelSectionFrame(route, 0);
+  const entryBacklightPosition = entranceFrame.center
     .subtract(entranceFrame.tangent.scale(1.6));
-  entryBacklightPosition.y += EYE_HEIGHT + 0.08;
+  entryBacklightPosition.addInPlace(entranceFrame.vertical.scale(0.08));
   // This lives in stable tunnel-route coordinates, behind the visitor at the
   // entrance, so it reads as Golden Hour light travelling forward through the
   // opening without relying on any rift or handoff state.
@@ -640,9 +633,8 @@ function createTunnelLights(scene, meshes, route) {
   entryBacklight.intensity = ENTRY_BACKLIGHT_MAX_INTENSITY;
   entryBacklight.includedOnlyMeshes.push(...meshes);
   const points = GRAZING_LIGHT_RIGS.map((rig, index) => {
-    const frame = route.frameAt(0);
-    const position = frame.position.clone();
-    position.y += EYE_HEIGHT;
+    const frame = getTunnelSectionFrame(route, 0);
+    const position = frame.center.clone();
     // Each rig is later kept alongside the moving route position.  Starting
     // it off-axis ensures it rakes across the wall instead of becoming a
     // forward-facing headlight.
@@ -669,9 +661,8 @@ function createTunnelLights(scene, meshes, route) {
   fill.groundColor = BABYLON.Color3.FromHexString("#321d26");
   fill.intensity = 0.18;
   fill.includedOnlyMeshes.push(...meshes);
-  const exitFrame = route.frameAt(1);
-  const spillPosition = exitFrame.position.add(exitFrame.tangent.scale(3.1));
-  spillPosition.y += EYE_HEIGHT;
+  const exitFrame = getTunnelSectionFrame(route, 1);
+  const spillPosition = exitFrame.center.add(exitFrame.tangent.scale(3.1));
   // Positioned just beyond the existing tunnel exit, this broad cone points
   // back into the tunnel and reads as light spilling out of the White Room.
   const whiteRoomSpill = new BABYLON.SpotLight(
@@ -723,10 +714,9 @@ function updateTunnelLights(lights, route, time, impulse) {
   lights.points.forEach((light, index) => {
     const rig = lights.rigs[index];
     const lightTime = BABYLON.Scalar.Clamp(time + rig.ahead, 0, TUNNEL_DURATION);
-    const frame = route.frameAt(lightTime / TUNNEL_DURATION);
+    const frame = getTunnelSectionFrame(route, lightTime / TUNNEL_DURATION);
     const sideOffset = Math.max(0.34, getTunnelDiameter(lightTime) * 0.29) * Math.sign(rig.side);
-    light.position.copyFrom(frame.position);
-    light.position.y += EYE_HEIGHT;
+    light.position.copyFrom(frame.center);
     light.position.addInPlace(frame.lateral.scale(sideOffset));
     light.position.addInPlace(frame.vertical.scale(rig.height));
     light.range = rig.range * BABYLON.Scalar.Lerp(1, LATE_TUNNEL_RANGE_BOOST, lateVisibility);
@@ -734,9 +724,8 @@ function updateTunnelLights(lights, route, time, impulse) {
       // These broad spots sit beside a later tunnel section and aim back down
       // the route, so their grazing highlight returns toward the traveller.
       const viewerTime = BABYLON.Scalar.Clamp(time - rig.returnRake, 0, TUNNEL_DURATION);
-      const viewerFrame = route.frameAt(viewerTime / TUNNEL_DURATION);
-      const viewerPosition = viewerFrame.position.clone();
-      viewerPosition.y += EYE_HEIGHT;
+      const viewerFrame = getTunnelSectionFrame(route, viewerTime / TUNNEL_DURATION);
+      const viewerPosition = viewerFrame.center.clone();
       light.direction.copyFrom(viewerPosition.subtract(light.position).normalize());
     }
     // The entry carries a little more soft daylight. It drains gradually
