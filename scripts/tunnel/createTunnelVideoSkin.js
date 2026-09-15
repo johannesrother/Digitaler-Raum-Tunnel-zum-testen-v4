@@ -1,15 +1,14 @@
 import { getIdyllSaturation } from "../environment/createIdyllDesaturation.js";
 
 const VIDEO_OPACITY = 0.66;
+const START_VIDEO = 14;
 
-/** Two prepared sources share one material mapping on the continuous tunnel shell. */
+/** Reuses one full-shell material mapping with at most current + prepared video. */
 export function createTunnelVideoSkin(scene, material) {
-  const source14 = createVideoSource(scene, 14);
-  const source13 = createVideoSource(scene, 13);
+  let currentSource = createVideoSource(scene, START_VIDEO);
+  let preparedSource = null;
+  let requestedSwitch = null;
   let active = false;
-  let source13Started = false;
-  let switchRequested = false;
-  let useSource13 = false;
   let tunnelTime = 0;
   let generation = 0;
 
@@ -21,40 +20,37 @@ export function createTunnelVideoSkin(scene, material) {
     getClassName() { return "TunnelVideoSkinPlugin"; }
 
     getSamplers(samplers) {
-      samplers.push("tunnelVideo14Sampler", "tunnelVideo13Sampler");
+      samplers.push("tunnelVideoSampler");
     }
 
     getActiveTextures(textures) {
-      textures.push(source14.texture, source13.texture);
+      textures.push(currentSource.texture);
+      if (preparedSource) textures.push(preparedSource.texture);
     }
 
     hasTexture(candidate) {
-      return candidate === source14.texture || candidate === source13.texture;
+      return candidate === currentSource.texture || candidate === preparedSource?.texture;
     }
 
     getUniforms() {
       return {
-        ubo: [{ name: "tunnelVideoSkinState", size: 3, type: "vec3" }],
-        fragment: "uniform vec3 tunnelVideoSkinState;",
+        ubo: [{ name: "tunnelVideoSkinState", size: 2, type: "vec2" }],
+        fragment: "uniform vec2 tunnelVideoSkinState;",
       };
     }
 
     bindForSubMesh(buffer) {
-      updateSourceFrame(source14, active && !useSource13);
-      updateSourceFrame(source13, active && source13Started);
-      if (switchRequested && source13.hasFrame && !useSource13) {
-        useSource13 = true;
-        source14.video.pause();
+      updateSourceFrame(currentSource, active);
+      if (preparedSource) updateSourceFrame(preparedSource, active);
+      if (requestedSwitch === preparedSource?.number && preparedSource.hasFrame) {
+        promotePreparedSource();
       }
-      const visibleSourceReady = useSource13 ? source13.hasFrame : source14.hasFrame;
-      buffer.updateFloat3(
+      buffer.updateFloat2(
         "tunnelVideoSkinState",
-        active && visibleSourceReady ? VIDEO_OPACITY : 0,
+        active && currentSource.hasFrame ? VIDEO_OPACITY : 0,
         getIdyllSaturation(tunnelTime),
-        useSource13 ? 1 : 0,
       );
-      buffer.setTexture("tunnelVideo14Sampler", source14.texture);
-      buffer.setTexture("tunnelVideo13Sampler", source13.texture);
+      buffer.setTexture("tunnelVideoSampler", currentSource.texture);
     }
 
     getCustomCode(stage) {
@@ -71,8 +67,7 @@ export function createTunnelVideoSkin(scene, material) {
       if (stage !== "fragment") return null;
       return {
         CUSTOM_FRAGMENT_DEFINITIONS: `varying vec3 vTunnelVideoSkinCoord;
-          uniform sampler2D tunnelVideo14Sampler;
-          uniform sampler2D tunnelVideo13Sampler;`,
+          uniform sampler2D tunnelVideoSampler;`,
         CUSTOM_FRAGMENT_MAIN_END: `
           float tunnelVideoAlpha = tunnelVideoSkinState.x;
           if (tunnelVideoAlpha > 0.0001) {
@@ -80,12 +75,7 @@ export function createTunnelVideoSkin(scene, material) {
               clamp(vTunnelVideoSkinCoord.x, 0.0, 1.0),
               fract(atan(vTunnelVideoSkinCoord.z, vTunnelVideoSkinCoord.y) / 6.2831853 + 1.0)
             );
-            vec3 tunnelVideoSample;
-            if (tunnelVideoSkinState.z > 0.5) {
-              tunnelVideoSample = texture2D(tunnelVideo13Sampler, tunnelVideoUV).rgb;
-            } else {
-              tunnelVideoSample = texture2D(tunnelVideo14Sampler, tunnelVideoUV).rgb;
-            }
+            vec3 tunnelVideoSample = texture2D(tunnelVideoSampler, tunnelVideoUV).rgb;
             vec3 tunnelVideoLinear = toLinearSpace(tunnelVideoSample);
             float tunnelVideoLuma = dot(
               tunnelVideoLinear,
@@ -116,54 +106,79 @@ export function createTunnelVideoSkin(scene, material) {
 
   new TunnelVideoSkinPlugin();
 
-  const playSource = (source, label) => {
+  const playSource = (source) => {
     source.video.autoplay = true;
+    source.playing = true;
     const run = generation;
     source.video.play().catch((error) => {
+      source.playing = false;
       if (active && run === generation) {
-        console.error(`TUNNEL VIDEO ${label} PLAY ERROR`, error);
+        console.error(`TUNNEL VIDEO ${source.number} PLAY ERROR`, error);
       }
     });
+  };
+
+  const promotePreparedSource = () => {
+    if (!preparedSource || requestedSwitch !== preparedSource.number) return;
+    const previousSource = currentSource;
+    currentSource = preparedSource;
+    preparedSource = null;
+    requestedSwitch = null;
+    disposeSource(previousSource);
+  };
+
+  const prepare = (number) => {
+    if (!active || currentSource.number === number || preparedSource?.number === number) return;
+    if (preparedSource) disposeSource(preparedSource);
+    preparedSource = createVideoSource(scene, number);
+    playSource(preparedSource);
   };
 
   const reset = () => {
     generation += 1;
     active = false;
-    source13Started = false;
-    switchRequested = false;
-    useSource13 = false;
+    requestedSwitch = null;
     tunnelTime = 0;
-    resetSource(source14);
-    resetSource(source13);
+    if (preparedSource) {
+      disposeSource(preparedSource);
+      preparedSource = null;
+    }
+    if (currentSource.number === START_VIDEO) {
+      resetSource(currentSource);
+    } else {
+      disposeSource(currentSource);
+      currentSource = createVideoSource(scene, START_VIDEO);
+    }
   };
 
   return {
     get opacity() { return VIDEO_OPACITY; },
+    get currentVideo() { return currentSource.number; },
+    get activeDecodeCount() {
+      return Number(currentSource.playing) + Number(preparedSource?.playing ?? false);
+    },
     update(time) {
       tunnelTime = time;
       if (active) return;
       active = true;
       generation += 1;
-      playSource(source14, 14);
+      playSource(currentSource);
     },
-    prepareSource13() {
-      if (!active || source13Started) return;
-      source13Started = true;
-      playSource(source13, 13);
+    prepare(number) {
+      prepare(number);
     },
-    switchToSource13() {
-      if (!active || useSource13 || switchRequested) return;
-      switchRequested = true;
-      if (!source13Started) {
-        source13Started = true;
-        playSource(source13, 13);
-      }
+    switchTo(number) {
+      if (!active || currentSource.number === number) return;
+      if (preparedSource?.number !== number) prepare(number);
+      requestedSwitch = number;
+      if (preparedSource?.hasFrame) promotePreparedSource();
     },
     reset,
     dispose() {
-      reset();
-      disposeSource(source14);
-      disposeSource(source13);
+      generation += 1;
+      if (preparedSource) disposeSource(preparedSource);
+      disposeSource(currentSource);
+      preparedSource = null;
     },
   };
 }
@@ -188,7 +203,7 @@ function createVideoSource(scene, number) {
   );
   texture.wrapU = BABYLON.Texture.CLAMP_ADDRESSMODE;
   texture.wrapV = BABYLON.Texture.CLAMP_ADDRESSMODE;
-  return { video, texture, hasFrame: false };
+  return { number, video, texture, hasFrame: false, playing: false };
 }
 
 function updateSourceFrame(source, shouldUpdate) {
@@ -199,12 +214,15 @@ function updateSourceFrame(source, shouldUpdate) {
 
 function resetSource(source) {
   source.hasFrame = false;
+  source.playing = false;
   source.video.autoplay = false;
   source.video.pause();
   if (source.video.currentTime !== 0) source.video.currentTime = 0;
 }
 
 function disposeSource(source) {
+  source.playing = false;
+  source.video.pause();
   source.texture.dispose();
   source.video.removeAttribute("src");
   source.video.load();

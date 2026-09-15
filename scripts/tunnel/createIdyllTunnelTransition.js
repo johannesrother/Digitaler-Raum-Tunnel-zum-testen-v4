@@ -24,12 +24,33 @@ const RIFT_VISIBILITY_EPSILON = 0.002;
 const PORTAL_VISIBLE_THRESHOLD = 0.01;
 const RIFT_APERTURE_MASK_DEPTH = -0.145;
 const ENTRY_ROUTE_EASE_DURATION = 0.75;
-const TUNNEL_TIC_START = 5;
-const TUNNEL_TIC_SECOND_PEAK = 0.31;
-const TUNNEL_TIC_DURATION = 0.82;
-const TUNNEL_TIC_ANGLES = [9, 14, 7].map((angle) => BABYLON.Tools.ToRadians(angle));
-const TUNNEL_TIC_REST_ANGLES = [2, 1.5].map((angle) => BABYLON.Tools.ToRadians(angle));
-const VIDEO_13_PREPARE_AT = 3.25;
+const VIDEO_PREPARE_LEAD = 1.5;
+const DEG_TO_RAD = Math.PI / 180;
+const TUNNEL_VIDEO_CHANGES = [
+  { at: 7.4, video: 2, impulses: [
+    { offset: 0, attack: 0.055, release: 0.22, yaw: 5.5, pitch: -1.5 },
+  ] },
+  { at: 17.8, video: 13, impulses: [
+    { offset: 0, attack: 0.05, release: 0.18, yaw: -7, pitch: 2.5 },
+    { offset: 0.23, attack: 0.04, release: 0.16, yaw: 3.5, pitch: -1 },
+  ] },
+  { at: 25.6, video: 20, impulses: [
+    { offset: 0, attack: 0.045, release: 0.2, yaw: 8, pitch: 3 },
+  ] },
+  { at: 36.9, video: 15, impulses: [
+    { offset: 0, attack: 0.045, release: 0.17, yaw: -9, pitch: -3 },
+    { offset: 0.21, attack: 0.035, release: 0.15, yaw: 4, pitch: 1.5 },
+  ] },
+  { at: 43.7, video: 28, impulses: [
+    { offset: 0, attack: 0.04, release: 0.16, yaw: 11, pitch: -3.5 },
+    { offset: 0.19, attack: 0.035, release: 0.13, yaw: -5, pitch: 2.2 },
+    { offset: 0.36, attack: 0.03, release: 0.14, yaw: 4, pitch: -1.5 },
+  ] },
+  { at: 49.3, video: 1, impulses: [
+    { offset: 0, attack: 0.035, release: 0.16, yaw: -12, pitch: 4.5 },
+    { offset: 0.2, attack: 0.03, release: 0.14, yaw: 6, pitch: -2 },
+  ] },
+];
 const FLASH_DEBUG_PRE_ENTRY_MS = 2000;
 const FLASH_DEBUG_POST_ENTRY_MS = 3000;
 const FLASH_DEBUG_MAX_EVENTS = 12000;
@@ -70,8 +91,10 @@ export function createIdyllTunnelTransition(scene, options) {
   let suctionSoundStarted = false;
   let tunnelEntryElapsed = 0;
   let previousTunnelTicYaw = 0;
-  let video13Prepared = false;
-  let video13Switched = false;
+  let previousTunnelTicPitch = 0;
+  let nextVideoChangeIndex = 0;
+  let preparedVideoChangeIndex = -1;
+  const tunnelTicOffset = { yaw: 0, pitch: 0 };
   let experienceStarted = false;
   let previousFrameTime = performance.now();
   const initialHeading = headingFrom(options.initialForward);
@@ -128,9 +151,11 @@ export function createIdyllTunnelTransition(scene, options) {
     previousFrameTime = frameTime;
     // Remove the prior frame's temporary head-tic offset before the existing
     // path controller computes its regular, unmodified heading.
-    if (previousTunnelTicYaw !== 0) {
+    if (previousTunnelTicYaw !== 0 || previousTunnelTicPitch !== 0) {
       root.rotation.y = normalizeAngle(root.rotation.y - previousTunnelTicYaw);
+      root.rotation.x = normalizeAngle(root.rotation.x - previousTunnelTicPitch);
       previousTunnelTicYaw = 0;
+      previousTunnelTicPitch = 0;
     }
     if (tunnelEntryPrepared) tunnelEntryElapsed += elapsedDelta;
     elapsed += elapsedDelta;
@@ -212,17 +237,23 @@ export function createIdyllTunnelTransition(scene, options) {
       idyllHidden = true;
     }
     if (tunnelEntryPrepared && !hasReachedWhiteRoom) {
-      if (!video13Prepared && tunnelEntryElapsed >= VIDEO_13_PREPARE_AT) {
-        video13Prepared = true;
-        options.tunnel.prepareVideo13();
+      const videoChange = TUNNEL_VIDEO_CHANGES[nextVideoChangeIndex];
+      if (videoChange
+        && preparedVideoChangeIndex !== nextVideoChangeIndex
+        && tunnelEntryElapsed >= videoChange.at - VIDEO_PREPARE_LEAD) {
+        options.tunnel.prepareVideo(videoChange.video);
+        preparedVideoChangeIndex = nextVideoChangeIndex;
       }
-      if (!video13Switched
-        && tunnelEntryElapsed >= TUNNEL_TIC_START + TUNNEL_TIC_SECOND_PEAK) {
-        video13Switched = true;
-        options.tunnel.switchToVideo13();
+      if (videoChange && tunnelEntryElapsed >= videoChange.at) {
+        options.tunnel.switchVideo(videoChange.video);
+        nextVideoChangeIndex += 1;
+        preparedVideoChangeIndex = -1;
       }
-      previousTunnelTicYaw = tunnelCameraTicYaw(tunnelEntryElapsed);
+      tunnelCameraTicOffset(tunnelEntryElapsed, tunnelTicOffset);
+      previousTunnelTicYaw = tunnelTicOffset.yaw;
+      previousTunnelTicPitch = tunnelTicOffset.pitch;
       root.rotation.y = normalizeAngle(root.rotation.y + previousTunnelTicYaw);
+      root.rotation.x = normalizeAngle(root.rotation.x + previousTunnelTicPitch);
     }
     const riftIsVisiblyOpen = rift.update(
       elapsed,
@@ -284,8 +315,9 @@ export function createIdyllTunnelTransition(scene, options) {
       suctionSoundStarted = false;
       tunnelEntryElapsed = 0;
       previousTunnelTicYaw = 0;
-      video13Prepared = false;
-      video13Switched = false;
+      previousTunnelTicPitch = 0;
+      nextVideoChangeIndex = 0;
+      preparedVideoChangeIndex = -1;
       options.whiteRoomActive = false;
       options.whiteRoom.reset();
       initialPreviousLightStates.forEach((enabled, light) => light.setEnabled(enabled));
@@ -499,45 +531,20 @@ function applyPathTransform(root, route, time, initialHeading, delta) {
   root.rotation.y = lerpAngle(root.rotation.y, desiredYaw, smoothing);
 }
 
-function tunnelCameraTicYaw(timeSinceCrossing) {
-  const time = timeSinceCrossing - TUNNEL_TIC_START;
-  if (time < 0 || time >= TUNNEL_TIC_DURATION) return 0;
-
-  if (time < 0.045) {
-    return BABYLON.Scalar.Lerp(0, TUNNEL_TIC_ANGLES[0], time / 0.045);
+function tunnelCameraTicOffset(timeSinceCrossing, result) {
+  result.yaw = 0;
+  result.pitch = 0;
+  for (const change of TUNNEL_VIDEO_CHANGES) {
+    for (const impulse of change.impulses) {
+      const relative = timeSinceCrossing - change.at - impulse.offset;
+      if (relative < -impulse.attack || relative > impulse.release) continue;
+      const strength = relative < 0
+        ? smoothstep((relative + impulse.attack) / impulse.attack)
+        : 1 - smoothstep(relative / impulse.release);
+      result.yaw += impulse.yaw * DEG_TO_RAD * strength;
+      result.pitch += impulse.pitch * DEG_TO_RAD * strength;
+    }
   }
-  if (time < 0.12) {
-    return BABYLON.Scalar.Lerp(
-      TUNNEL_TIC_ANGLES[0],
-      TUNNEL_TIC_REST_ANGLES[0],
-      (time - 0.045) / 0.075,
-    );
-  }
-  if (time < 0.255) return TUNNEL_TIC_REST_ANGLES[0];
-  if (time < TUNNEL_TIC_SECOND_PEAK) {
-    return BABYLON.Scalar.Lerp(
-      TUNNEL_TIC_REST_ANGLES[0],
-      TUNNEL_TIC_ANGLES[1],
-      (time - 0.255) / 0.055,
-    );
-  }
-  if (time < 0.43) {
-    return BABYLON.Scalar.Lerp(
-      TUNNEL_TIC_ANGLES[1],
-      TUNNEL_TIC_REST_ANGLES[1],
-      (time - TUNNEL_TIC_SECOND_PEAK) / 0.12,
-    );
-  }
-  if (time < 0.525) return TUNNEL_TIC_REST_ANGLES[1];
-  if (time < 0.565) {
-    return BABYLON.Scalar.Lerp(
-      TUNNEL_TIC_REST_ANGLES[1],
-      TUNNEL_TIC_ANGLES[2],
-      (time - 0.525) / 0.04,
-    );
-  }
-  const returnAmount = smoothstep((time - 0.565) / (TUNNEL_TIC_DURATION - 0.565));
-  return BABYLON.Scalar.Lerp(TUNNEL_TIC_ANGLES[2], 0, returnAmount);
 }
 
 function calmTravelProgress(amount) {
