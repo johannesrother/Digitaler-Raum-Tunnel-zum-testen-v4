@@ -82,6 +82,7 @@ async function startExperience() {
     onEntered: () => startScreen.requestStart(),
   });
   scene.metadata.transition.attachWebXR(xr);
+  reexperienceButton.attachWebXR(scene, xr);
   await scene.whenReadyAsync();
   startScreen.setReady(() => {
     // This direct click is also the browser gesture for the existing HTML
