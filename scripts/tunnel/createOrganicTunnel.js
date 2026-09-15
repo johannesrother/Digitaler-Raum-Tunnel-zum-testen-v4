@@ -26,6 +26,7 @@ const ENTRY_BACKLIGHT_RANGE = 34;
 const TUNNEL_MEMBRANE_ALPHA_START = 0.18;
 const TUNNEL_MEMBRANE_ALPHA_MID = 0.28;
 const TUNNEL_MEMBRANE_ALPHA_END = 0.37;
+const CAMERA_FLOOR_BIAS = 0.62;
 // Existing morph fields remain deliberately uneven so they do not read as one
 // synchronized tube pulse. Values are moderate and still safety-clamped.
 const WALL_MOTION_AMPLITUDES = [1.1, 1.2, 1.02, 1.16, 1.07, 1.13];
@@ -107,6 +108,20 @@ export function createOrganicTunnel(scene, options) {
   return {
     mesh,
     route,
+    cameraFloorOffsetAt(progress) {
+      const clampedProgress = BABYLON.Scalar.Clamp(progress, 0, 1);
+      const time = clampedProgress * TUNNEL_DURATION;
+      const look = getTunnelLook(time);
+      const bottomRadius = getFinalFunnelDiameter(time) * 0.5
+        * organicProfile(Math.PI * 1.5, clampedProgress, look.detail);
+      const localVertical = route.frameAt(clampedProgress).vertical;
+      // Preserve the established entrance height, then move the locomotion
+      // base toward the real local underside as the shell closes around it.
+      // Scaling by the live bottom radius keeps the camera safely inside the
+      // 30 cm terminal opening while retaining a clear floor relationship.
+      const grounding = smoothstep((clampedProgress - 0.04) / 0.9);
+      return localVertical.scale(-bottomRadius * CAMERA_FLOOR_BIAS * grounding);
+    },
     setEnabled(enabled) {
       mesh.setEnabled(enabled);
       if (!enabled) videoSkin.reset();
