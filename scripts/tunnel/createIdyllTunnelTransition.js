@@ -28,49 +28,50 @@ const VIDEO_PREPARE_LEAD = 1.5;
 const DEG_TO_RAD = Math.PI / 180;
 const TUNNEL_VIDEO_CHANGES = [
   { at: 7.4, video: 2, impulses: [
-    { offset: 0, attack: 0.055, release: 0.21, yaw: 4, pitch: -1.2 },
+    { offset: 0, attack: 0.025, release: 0.115, yaw: 22, pitch: -3 },
   ] },
   { at: 13.3, video: 21, impulses: [
-    { offset: -0.16, attack: 0.035, release: 0.1, yaw: -2.5, pitch: 0.8 },
-    { offset: 0, attack: 0.045, release: 0.17, yaw: -6, pitch: 2.2 },
+    { offset: -0.19, attack: 0.025, release: 0.095, yaw: 14, pitch: 2 },
+    { offset: 0, attack: 0.025, release: 0.115, yaw: 32, pitch: -4 },
   ] },
   { at: 18.1, video: 11, impulses: [
-    { offset: 0, attack: 0.05, release: 0.19, yaw: 5, pitch: 1.8 },
+    { offset: 0, attack: 0.025, release: 0.12, yaw: 28, pitch: 4 },
   ] },
   { at: 23.7, video: 13, impulses: [
-    { offset: -0.18, attack: 0.035, release: 0.11, yaw: 2, pitch: -1 },
-    { offset: 0, attack: 0.04, release: 0.17, yaw: -8, pitch: 2.8 },
-    { offset: 0.2, attack: 0.03, release: 0.13, yaw: 3, pitch: -1.4 },
+    { offset: -0.22, attack: 0.025, release: 0.095, yaw: 16, pitch: -2 },
+    { offset: 0, attack: 0.02, release: 0.115, yaw: 40, pitch: 5 },
+    { offset: 0.21, attack: 0.02, release: 0.1, yaw: -14, pitch: -3 },
   ] },
   { at: 27.2, video: 12, impulses: [
-    { offset: 0, attack: 0.04, release: 0.16, yaw: 7, pitch: -2.5 },
-    { offset: 0.18, attack: 0.03, release: 0.13, yaw: -3, pitch: 1 },
+    { offset: 0, attack: 0.02, release: 0.105, yaw: 35, pitch: -5 },
+    { offset: 0.2, attack: 0.02, release: 0.09, yaw: 18, pitch: 3 },
   ] },
   { at: 31.8, video: 20, impulses: [
-    { offset: 0, attack: 0.045, release: 0.18, yaw: -6, pitch: -2 },
+    { offset: -0.19, attack: 0.02, release: 0.09, yaw: 15, pitch: 2 },
+    { offset: 0, attack: 0.02, release: 0.115, yaw: 42, pitch: -6 },
   ] },
   { at: 34.5, video: 31, impulses: [
-    { offset: -0.16, attack: 0.03, release: 0.1, yaw: -2, pitch: 1 },
-    { offset: 0, attack: 0.04, release: 0.16, yaw: 9, pitch: 3 },
-    { offset: 0.17, attack: 0.03, release: 0.12, yaw: -4, pitch: -1.5 },
+    { offset: -0.21, attack: 0.02, release: 0.09, yaw: 20, pitch: -3 },
+    { offset: 0, attack: 0.018, release: 0.105, yaw: 50, pitch: 7 },
+    { offset: 0.2, attack: 0.02, release: 0.095, yaw: 25, pitch: -4 },
   ] },
   { at: 38.4, video: 15, impulses: [
-    { offset: 0, attack: 0.04, release: 0.16, yaw: -10, pitch: -3.5 },
-    { offset: 0.2, attack: 0.03, release: 0.13, yaw: 4, pitch: 1.5 },
+    { offset: 0, attack: 0.018, release: 0.105, yaw: 45, pitch: -7 },
+    { offset: 0.2, attack: 0.02, release: 0.09, yaw: -18, pitch: 4 },
   ] },
   { at: 40.6, video: 26, impulses: [
-    { offset: -0.15, attack: 0.03, release: 0.09, yaw: 3, pitch: -1.2 },
-    { offset: 0, attack: 0.035, release: 0.15, yaw: 11, pitch: 3.8 },
-    { offset: 0.16, attack: 0.025, release: 0.11, yaw: -5, pitch: -2 },
+    { offset: -0.2, attack: 0.018, release: 0.08, yaw: 18, pitch: 3 },
+    { offset: 0, attack: 0.018, release: 0.1, yaw: 55, pitch: -8 },
+    { offset: 0.19, attack: 0.018, release: 0.085, yaw: 30, pitch: 5 },
   ] },
   { at: 44.9, video: 28, impulses: [
-    { offset: 0, attack: 0.035, release: 0.15, yaw: -12, pitch: 4 },
-    { offset: 0.18, attack: 0.025, release: 0.12, yaw: 6, pitch: -2 },
+    { offset: -0.2, attack: 0.018, release: 0.085, yaw: 25, pitch: -4 },
+    { offset: 0, attack: 0.018, release: 0.105, yaw: 48, pitch: 7 },
   ] },
   { at: 48.2, video: 1, impulses: [
-    { offset: -0.14, attack: 0.025, release: 0.085, yaw: -3, pitch: 1.3 },
-    { offset: 0, attack: 0.03, release: 0.14, yaw: 13, pitch: -4.8 },
-    { offset: 0.17, attack: 0.025, release: 0.11, yaw: -6, pitch: 2 },
+    { offset: -0.2, attack: 0.018, release: 0.075, yaw: 22, pitch: 3 },
+    { offset: 0, attack: 0.015, release: 0.1, yaw: 60, pitch: -9 },
+    { offset: 0.19, attack: 0.018, release: 0.085, yaw: 34, pitch: 5 },
   ] },
 ];
 const FLASH_DEBUG_PRE_ENTRY_MS = 2000;
