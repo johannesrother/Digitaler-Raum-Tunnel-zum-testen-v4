@@ -26,6 +26,7 @@ const RIFT_APERTURE_MASK_DEPTH = -0.145;
 const ENTRY_ROUTE_EASE_DURATION = 0.75;
 const VIDEO_PREPARE_LEAD = 1.5;
 const DEG_TO_RAD = Math.PI / 180;
+const NON_XR_CEILING_CLEARANCE = 0.14;
 const TUNNEL_VIDEO_CHANGES = [
   { at: 7.4, video: 2, impulses: [
     { offset: 0, attack: 0.025, release: 0.115, yaw: 22, pitch: -3 },
@@ -205,13 +206,23 @@ export function createIdyllTunnelTransition(scene, options) {
       applyPathTransform(root, tunnelRoute, riftApproachTime + (tunnelRoute.entryTime - riftApproachTime)
         * riftPullProgress(elapsed - IDYLL_TRAVEL_DURATION, tunnelRoute, riftApproachTime), initialHeading, delta);
     } else if (!hasReachedWhiteRoom) {
+      const tunnelRouteTime = tunnelRoute.entryTime
+        + tunnelTravelTime(tunnelTime, tunnelRoute, riftApproachTime);
       applyPathTransform(
         root,
         tunnelRoute,
-        tunnelRoute.entryTime + tunnelTravelTime(tunnelTime, tunnelRoute, riftApproachTime),
+        tunnelRouteTime,
         initialHeading,
         delta,
       );
+      if (!xrCamera) {
+        keepNonXrCameraInsideTunnel(
+          options.desktopCamera,
+          initialCameraPosition.y,
+          options.tunnel,
+          tunnelRoute.tunnelProgressAt(tunnelRouteTime),
+        );
+      }
       options.tunnel.update(tunnelTime);
       options.onTunnelUpdate?.(tunnelTime);
       if (tunnelTime >= WHITE_PREVIEW_START) {
@@ -451,7 +462,14 @@ function createTunnelTravelRoute(entryPath, tunnelRoute, entranceCenter) {
       points.push(tunnelRoute.positionAt(index / 188 * 0.986));
     }
   }
-  return createPolylineRoute(points, closestDistanceAlongPolyline(points, entranceCenter));
+  const route = createPolylineRoute(points, closestDistanceAlongPolyline(points, entranceCenter));
+  const finalTunnelDistance = tunnelRoute.distanceAtProgress(0.986);
+  route.tunnelProgressAt = (time) => tunnelRoute.progressAtDistance(BABYLON.Scalar.Clamp(
+    route.distanceAt(time) - route.entryDistance,
+    0,
+    finalTunnelDistance,
+  ));
+  return route;
 }
 
 function createPolylineRoute(points, entranceDistance) {
@@ -552,6 +570,14 @@ function applyPathTransform(root, route, time, initialHeading, delta) {
   const desiredYaw = normalizeAngle(headingFrom(route.tangentAt(time)) - initialHeading);
   const smoothing = 1 - Math.exp(-Math.max(0, delta) * 2.6);
   root.rotation.y = lerpAngle(root.rotation.y, desiredYaw, smoothing);
+}
+
+function keepNonXrCameraInsideTunnel(camera, standingHeight, tunnel, progress) {
+  const maximumHeight = tunnel.verticalClearanceAt(progress) - NON_XR_CEILING_CLEARANCE;
+  // The authored clearance curve is continuous, so following this cap lowers
+  // the desktop demo smoothly only once the ceiling reaches standing height.
+  // XR never enters this branch and remains entirely driven by tracked pose.
+  camera.position.y = Math.min(standingHeight, maximumHeight);
 }
 
 function tunnelCameraTicOffset(timeSinceCrossing, result) {

@@ -25,6 +25,7 @@ const ENTRY_BACKLIGHT_RANGE = 34;
 const TUNNEL_MEMBRANE_ALPHA_START = 0.18;
 const TUNNEL_MEMBRANE_ALPHA_MID = 0.28;
 const TUNNEL_MEMBRANE_ALPHA_END = 0.37;
+const MINIMUM_TUNNEL_VERTICAL_CLEARANCE = 1.2;
 // Existing morph fields remain deliberately uneven so they do not read as one
 // synchronized tube pulse. Values are moderate and still safety-clamped.
 const WALL_MOTION_AMPLITUDES = [1.1, 1.2, 1.02, 1.16, 1.07, 1.13];
@@ -106,6 +107,9 @@ export function createOrganicTunnel(scene, options) {
   return {
     mesh,
     route,
+    verticalClearanceAt(progress) {
+      return getTunnelSectionFrame(route, progress).verticalClearance;
+    },
     setEnabled(enabled) {
       mesh.setEnabled(enabled);
       if (!enabled) videoSkin.reset();
@@ -327,10 +331,12 @@ function getTunnelSectionFrame(route, progress) {
   const look = getTunnelLook(time);
   const bottomRadius = diameter * 0.5
     * organicProfile(Math.PI * 1.5, clampedProgress, look.detail);
+  const topRadius = diameter * 0.5
+    * organicProfile(Math.PI * 0.5, clampedProgress, look.detail);
   // The route is the local floor datum. Moving the section center by its
   // current bottom radius makes only the ceiling descend as the shell narrows.
   const center = frame.position.add(frame.vertical.scale(bottomRadius));
-  return { ...frame, center, diameter, look, time };
+  return { ...frame, center, diameter, look, time, verticalClearance: bottomRadius + topRadius };
 }
 
 /**
@@ -428,7 +434,14 @@ function getFinalFunnelDiameter(time) {
   const finalProgress = smoothstep((time - 42) / 18);
   // The visual shell resolves to a 0.30 m mean diameter at the endpoint. The
   // central route remains unchanged and the tunnel mesh remains uncollided.
-  return BABYLON.Scalar.Lerp(baseDiameter, 0.3, finalProgress);
+  const requestedDiameter = BABYLON.Scalar.Lerp(baseDiameter, 0.3, finalProgress);
+  const progress = BABYLON.Scalar.Clamp(time / TUNNEL_DURATION, 0, 1);
+  const look = getTunnelLook(time);
+  const verticalProfile = organicProfile(Math.PI * 1.5, progress, look.detail)
+    + organicProfile(Math.PI * 0.5, progress, look.detail);
+  const minimumDiameter = MINIMUM_TUNNEL_VERTICAL_CLEARANCE * 2
+    / Math.max(verticalProfile, 0.001);
+  return Math.max(requestedDiameter, minimumDiameter);
 }
 
 function bell(value, center, width) {
