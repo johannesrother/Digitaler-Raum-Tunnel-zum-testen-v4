@@ -27,54 +27,57 @@ const ENTRY_ROUTE_EASE_DURATION = 0.75;
 const VIDEO_PREPARE_LEAD = 1.5;
 const DEG_TO_RAD = Math.PI / 180;
 const NON_XR_CEILING_CLEARANCE = 0.14;
-const TUNNEL_VIDEO_CHANGES = [
-  { at: 7.4, video: 2, impulses: [
+const TUNNEL_TIC_EVENTS = [
+  { at: 7.4, impulses: [
     { offset: 0, attack: 0.025, release: 0.115, yaw: 22, pitch: -3 },
   ] },
-  { at: 13.3, video: 21, impulses: [
-    { offset: -0.19, attack: 0.025, release: 0.095, yaw: 14, pitch: 2 },
-    { offset: 0, attack: 0.025, release: 0.115, yaw: 32, pitch: -4 },
+  { at: 15.2, video: 2, impulses: [
+    { offset: -0.2, attack: 0.025, release: 0.095, yaw: 20, pitch: 2 },
+    { offset: 0, attack: 0.02, release: 0.115, yaw: 38, pitch: -5 },
   ] },
-  { at: 18.1, video: 11, impulses: [
-    { offset: 0, attack: 0.025, release: 0.12, yaw: 28, pitch: 4 },
-  ] },
-  { at: 23.7, video: 13, impulses: [
+  { at: 23.7, impulses: [
     { offset: -0.22, attack: 0.025, release: 0.095, yaw: 16, pitch: -2 },
-    { offset: 0, attack: 0.02, release: 0.115, yaw: 40, pitch: 5 },
+    { offset: 0, attack: 0.02, release: 0.115, yaw: 42, pitch: 5 },
     { offset: 0.21, attack: 0.02, release: 0.1, yaw: -14, pitch: -3 },
   ] },
-  { at: 27.2, video: 12, impulses: [
-    { offset: 0, attack: 0.02, release: 0.105, yaw: 35, pitch: -5 },
-    { offset: 0.2, attack: 0.02, release: 0.09, yaw: 18, pitch: 3 },
+  { at: 31.8, video: 25, impulses: [
+    { offset: -0.19, attack: 0.02, release: 0.09, yaw: 18, pitch: 2 },
+    { offset: 0, attack: 0.02, release: 0.115, yaw: 48, pitch: -6 },
   ] },
-  { at: 31.8, video: 20, impulses: [
-    { offset: -0.19, attack: 0.02, release: 0.09, yaw: 15, pitch: 2 },
-    { offset: 0, attack: 0.02, release: 0.115, yaw: 42, pitch: -6 },
-  ] },
-  { at: 34.5, video: 31, impulses: [
-    { offset: -0.21, attack: 0.02, release: 0.09, yaw: 20, pitch: -3 },
-    { offset: 0, attack: 0.018, release: 0.105, yaw: 50, pitch: 7 },
-    { offset: 0.2, attack: 0.02, release: 0.095, yaw: 25, pitch: -4 },
-  ] },
-  { at: 38.4, video: 15, impulses: [
+  { at: 38.4, impulses: [
     { offset: 0, attack: 0.018, release: 0.105, yaw: 45, pitch: -7 },
     { offset: 0.2, attack: 0.02, release: 0.09, yaw: -18, pitch: 4 },
   ] },
-  { at: 40.6, video: 26, impulses: [
+  { at: 46, video: 16, impulses: [
     { offset: -0.2, attack: 0.018, release: 0.08, yaw: 18, pitch: 3 },
     { offset: 0, attack: 0.018, release: 0.1, yaw: 55, pitch: -8 },
     { offset: 0.19, attack: 0.018, release: 0.085, yaw: 30, pitch: 5 },
   ] },
-  { at: 44.9, video: 28, impulses: [
+  { at: 52.4, impulses: [
     { offset: -0.2, attack: 0.018, release: 0.085, yaw: 25, pitch: -4 },
     { offset: 0, attack: 0.018, release: 0.105, yaw: 48, pitch: 7 },
   ] },
-  { at: 48.2, video: 1, impulses: [
+  { at: 56.6, impulses: [
     { offset: -0.2, attack: 0.018, release: 0.075, yaw: 22, pitch: 3 },
     { offset: 0, attack: 0.015, release: 0.1, yaw: 60, pitch: -9 },
     { offset: 0.19, attack: 0.018, release: 0.085, yaw: 34, pitch: 5 },
   ] },
 ];
+const TUNNEL_VIDEO_CHANGES = TUNNEL_TIC_EVENTS.filter(({ video }) => Number.isInteger(video));
+// Keyed velocity profile. Its analytic integral is normalized back to exactly
+// 52 route-seconds, so the established final pull and sixty-second endpoint do
+// not move. Values describe rhythm, not extra distance or a new route.
+const TUNNEL_SPEED_KEYS = [
+  { at: 0, speed: 0.78 },
+  { at: 8, speed: 0.95 },
+  { at: 16, speed: 0.84 },
+  { at: 27, speed: 1.2 },
+  { at: 36, speed: 0.96 },
+  { at: 45, speed: 1.3 },
+  { at: FINAL_PULL_START, speed: 1.026 },
+];
+const TUNNEL_SPEED_NORMALIZATION = FINAL_PULL_START
+  / integratedDramaticSpeed(FINAL_PULL_START);
 const FLASH_DEBUG_PRE_ENTRY_MS = 2000;
 const FLASH_DEBUG_POST_ENTRY_MS = 3000;
 const FLASH_DEBUG_MAX_EVENTS = 12000;
@@ -583,7 +586,7 @@ function keepNonXrCameraInsideTunnel(camera, standingHeight, tunnel, progress) {
 function tunnelCameraTicOffset(timeSinceCrossing, result) {
   result.yaw = 0;
   result.pitch = 0;
-  for (const change of TUNNEL_VIDEO_CHANGES) {
+  for (const change of TUNNEL_TIC_EVENTS) {
     for (const impulse of change.impulses) {
       const relative = timeSinceCrossing - change.at - impulse.offset;
       if (relative < -impulse.attack || relative > impulse.release) continue;
@@ -644,7 +647,8 @@ function tunnelEntryBlendTime(tunnelTime, route, approachTime) {
 }
 
 function tunnelTravelTime(tunnelTime, route, approachTime) {
-  return finalTunnelTravelTime(tunnelEntryBlendTime(tunnelTime, route, approachTime));
+  const entryBlendedTime = tunnelEntryBlendTime(tunnelTime, route, approachTime);
+  return finalTunnelTravelTime(dramaticTunnelTravelTime(entryBlendedTime));
 }
 
 function tunnelEntrySpeedMultiplier(tunnelTime, route, approachTime) {
@@ -656,6 +660,60 @@ function tunnelEntrySpeedMultiplier(tunnelTime, route, approachTime) {
   return initialSlope * (3 * progress ** 2 - 4 * progress + 1)
     + (-6 * progress ** 2 + 6 * progress)
     + (3 * progress ** 2 - 2 * progress);
+}
+
+function integratedDramaticSpeed(time) {
+  const clampedTime = Math.min(Math.max(time, 0), FINAL_PULL_START);
+  let distance = 0;
+  for (let index = 0; index < TUNNEL_SPEED_KEYS.length - 1; index += 1) {
+    const current = TUNNEL_SPEED_KEYS[index];
+    const next = TUNNEL_SPEED_KEYS[index + 1];
+    if (clampedTime <= current.at) break;
+    const duration = next.at - current.at;
+    const segmentTime = Math.min(clampedTime, next.at) - current.at;
+    const progress = Math.min(Math.max(segmentTime / duration, 0), 1);
+    // Integral of smoothstep(u) = u^3 - 0.5u^4. This makes the speed and
+    // cumulative distance continuous without accumulating frame-time error.
+    const easedIntegral = progress ** 3 - 0.5 * progress ** 4;
+    distance += duration * (
+      current.speed * progress
+      + (next.speed - current.speed) * easedIntegral
+    );
+    if (clampedTime < next.at) break;
+  }
+  return distance;
+}
+
+function dramaticTunnelTravelTime(tunnelTime) {
+  if (tunnelTime >= FINAL_PULL_START) {
+    return tunnelTime;
+  }
+  return integratedDramaticSpeed(tunnelTime) * TUNNEL_SPEED_NORMALIZATION;
+}
+
+function dramaticTunnelSpeedMultiplier(tunnelTime) {
+  if (tunnelTime >= FINAL_PULL_START) {
+    return 1;
+  }
+  const clampedTime = Math.max(0, tunnelTime);
+  for (let index = 0; index < TUNNEL_SPEED_KEYS.length - 1; index += 1) {
+    const current = TUNNEL_SPEED_KEYS[index];
+    const next = TUNNEL_SPEED_KEYS[index + 1];
+    if (clampedTime <= next.at) {
+      const progress = (clampedTime - current.at) / (next.at - current.at);
+      return BABYLON.Scalar.Lerp(current.speed, next.speed, smoothstep(progress))
+        * TUNNEL_SPEED_NORMALIZATION;
+    }
+  }
+  return 1;
+}
+
+function tunnelTravelSpeedMultiplier(tunnelTime, route, approachTime) {
+  const entryBlendedTime = tunnelEntryBlendTime(tunnelTime, route, approachTime);
+  const dramaticTime = dramaticTunnelTravelTime(entryBlendedTime);
+  return tunnelEntrySpeedMultiplier(tunnelTime, route, approachTime)
+    * dramaticTunnelSpeedMultiplier(entryBlendedTime)
+    * finalTunnelSpeedMultiplier(dramaticTime);
 }
 
 /**
@@ -1859,8 +1917,7 @@ function createDebugPanel() {
             : "idyll travel";
       const currentSpeed = inTunnel
         ? tunnelRoute.normalTunnelSpeed
-          * tunnelEntrySpeedMultiplier(tunnelTime, tunnelRoute, riftApproachTime)
-          * finalTunnelSpeedMultiplier(tunnelTime)
+          * tunnelTravelSpeedMultiplier(tunnelTime, tunnelRoute, riftApproachTime)
         : 0;
       panel.textContent = [
         `Experience: ${experienceTime.toFixed(1)} s`,

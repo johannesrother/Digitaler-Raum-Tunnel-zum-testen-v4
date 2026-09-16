@@ -1,7 +1,7 @@
 import { getIdyllSaturation } from "../environment/createIdyllDesaturation.js";
 
 const VIDEO_OPACITY = 0.66;
-const START_VIDEO = 14;
+const START_VIDEO = 29;
 
 /** Reuses one full-shell material mapping with at most current + prepared video. */
 export function createTunnelVideoSkin(scene, material) {
