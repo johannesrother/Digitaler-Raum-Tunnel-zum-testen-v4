@@ -29,38 +29,38 @@ const DEG_TO_RAD = Math.PI / 180;
 const NON_XR_CEILING_CLEARANCE = 0.14;
 const TUNNEL_TIC_EVENTS = [
   { at: 7.4, impulses: [
-    { offset: 0, attack: 0.025, release: 0.115, yaw: 22, pitch: -3 },
+    { offset: 0, attack: 0.01, release: 0.075, yaw: 52, pitch: -6 },
   ] },
   { at: 15.2, video: 2, impulses: [
-    { offset: -0.2, attack: 0.025, release: 0.095, yaw: 20, pitch: 2 },
-    { offset: 0, attack: 0.02, release: 0.115, yaw: 38, pitch: -5 },
+    { offset: -0.105, attack: 0.012, release: 0.065, yaw: 35, pitch: 4 },
+    { offset: 0, attack: 0.009, release: 0.08, yaw: 60, pitch: -8 },
   ] },
   { at: 23.7, impulses: [
-    { offset: -0.22, attack: 0.025, release: 0.095, yaw: 16, pitch: -2 },
-    { offset: 0, attack: 0.02, release: 0.115, yaw: 42, pitch: 5 },
-    { offset: 0.21, attack: 0.02, release: 0.1, yaw: -14, pitch: -3 },
+    { offset: -0.2, attack: 0.012, release: 0.055, yaw: 34, pitch: -4 },
+    { offset: -0.105, attack: 0.01, release: 0.065, yaw: -20, pitch: 3 },
+    { offset: 0, attack: 0.008, release: 0.085, yaw: 64, pitch: 8 },
   ] },
   { at: 31.8, video: 25, impulses: [
-    { offset: -0.19, attack: 0.02, release: 0.09, yaw: 18, pitch: 2 },
-    { offset: 0, attack: 0.02, release: 0.115, yaw: 48, pitch: -6 },
+    { offset: -0.105, attack: 0.012, release: 0.065, yaw: 42, pitch: 5 },
+    { offset: 0, attack: 0.008, release: 0.085, yaw: 68, pitch: -9 },
   ] },
   { at: 38.4, impulses: [
-    { offset: 0, attack: 0.018, release: 0.105, yaw: 45, pitch: -7 },
-    { offset: 0.2, attack: 0.02, release: 0.09, yaw: -18, pitch: 4 },
+    { offset: -0.09, attack: 0.01, release: 0.055, yaw: 58, pitch: -8 },
+    { offset: 0, attack: 0.01, release: 0.07, yaw: -22, pitch: 5 },
   ] },
   { at: 46, video: 16, impulses: [
-    { offset: -0.2, attack: 0.018, release: 0.08, yaw: 18, pitch: 3 },
-    { offset: 0, attack: 0.018, release: 0.1, yaw: 55, pitch: -8 },
-    { offset: 0.19, attack: 0.018, release: 0.085, yaw: 30, pitch: 5 },
+    { offset: -0.195, attack: 0.012, release: 0.055, yaw: 30, pitch: 4 },
+    { offset: -0.1, attack: 0.01, release: 0.06, yaw: -18, pitch: -3 },
+    { offset: 0, attack: 0.008, release: 0.085, yaw: 67, pitch: -10 },
   ] },
   { at: 52.4, impulses: [
-    { offset: -0.2, attack: 0.018, release: 0.085, yaw: 25, pitch: -4 },
-    { offset: 0, attack: 0.018, release: 0.105, yaw: 48, pitch: 7 },
+    { offset: -0.1, attack: 0.01, release: 0.06, yaw: 45, pitch: -6 },
+    { offset: 0, attack: 0.008, release: 0.08, yaw: 65, pitch: 9 },
   ] },
   { at: 56.6, impulses: [
-    { offset: -0.2, attack: 0.018, release: 0.075, yaw: 22, pitch: 3 },
-    { offset: 0, attack: 0.015, release: 0.1, yaw: 60, pitch: -9 },
-    { offset: 0.19, attack: 0.018, release: 0.085, yaw: 34, pitch: 5 },
+    { offset: -0.195, attack: 0.012, release: 0.055, yaw: 40, pitch: 5 },
+    { offset: -0.1, attack: 0.01, release: 0.06, yaw: -22, pitch: -4 },
+    { offset: 0, attack: 0.007, release: 0.085, yaw: 70, pitch: -10 },
   ] },
 ];
 const TUNNEL_VIDEO_CHANGES = TUNNEL_TIC_EVENTS.filter(({ video }) => Number.isInteger(video));
