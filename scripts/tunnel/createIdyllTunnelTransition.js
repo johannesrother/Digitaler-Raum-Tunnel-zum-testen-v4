@@ -13,10 +13,6 @@ const WHITE_ROOM_ARRIVAL_DURATION = 1;
 const WHITE_PREVIEW_START = 30;
 const TUNNEL_BLEND_DURATION = 2;
 const FINAL_PULL_START = 52;
-const FINAL_PULL_DURATION = TUNNEL_DURATION - FINAL_PULL_START;
-// Preserve the established onset and endpoint while making the existing final
-// acceleration read more physically alongside the suction sound.
-const FINAL_PULL_STRENGTH = 1.55;
 const RIFT_APPROACH_REMAINING_TIME = 3.4;
 const RIFT_CLOSE_DURATION = 1.4;
 const RIFT_CLOSURE_FADE_RANGE = 0.42;
@@ -64,20 +60,37 @@ const TUNNEL_TIC_EVENTS = [
   ] },
 ];
 const TUNNEL_VIDEO_CHANGES = TUNNEL_TIC_EVENTS.filter(({ video }) => Number.isInteger(video));
-// Keyed velocity profile. Its analytic integral is normalized back to exactly
-// 52 route-seconds, so the established final pull and sixty-second endpoint do
-// not move. Values describe rhythm, not extra distance or a new route.
+// Real-time velocity profile. Short ramps immediately after selected tics make
+// the movement feel inhibited or released without teleporting the locomotion
+// root. It is intentionally not normalized to a sixty-second clock: the route
+// ends only when the integral reaches the unchanged geometric endpoint.
 const TUNNEL_SPEED_KEYS = [
-  { at: 0, speed: 0.78 },
-  { at: 8, speed: 0.95 },
-  { at: 16, speed: 0.84 },
-  { at: 27, speed: 1.2 },
-  { at: 36, speed: 0.96 },
-  { at: 45, speed: 1.3 },
-  { at: FINAL_PULL_START, speed: 1.026 },
+  { at: 0, speed: 0.88 },
+  { at: 7.4, speed: 0.88 },
+  { at: 7.48, speed: 0.55 },
+  { at: 11, speed: 0.55 },
+  { at: 13.6, speed: 0.82 },
+  { at: 15.2, speed: 0.82 },
+  { at: 15.28, speed: 1.28 },
+  { at: 23.7, speed: 1.28 },
+  { at: 23.78, speed: 0.6 },
+  { at: 27, speed: 0.6 },
+  { at: 30.8, speed: 0.9 },
+  { at: 31.8, speed: 0.9 },
+  { at: 31.88, speed: 1.5 },
+  { at: 39.8, speed: 1.5 },
+  { at: 41, speed: 0.98 },
+  { at: 46, speed: 0.98 },
+  { at: 46.08, speed: 0.62 },
+  { at: 48.5, speed: 0.62 },
+  { at: 50, speed: 1.02 },
+  { at: 56.6, speed: 1.02 },
+  { at: 56.68, speed: 0.52 },
+  { at: 58.2, speed: 0.52 },
+  { at: 59.1, speed: 1.35 },
+  { at: 90, speed: 1.35 },
 ];
-const TUNNEL_SPEED_NORMALIZATION = FINAL_PULL_START
-  / integratedDramaticSpeed(FINAL_PULL_START);
+const TUNNEL_TRAVEL_DURATION = timeAtDramaticDistance(TUNNEL_DURATION);
 const FLASH_DEBUG_PRE_ENTRY_MS = 2000;
 const FLASH_DEBUG_POST_ENTRY_MS = 3000;
 const FLASH_DEBUG_MAX_EVENTS = 12000;
@@ -117,6 +130,9 @@ export function createIdyllTunnelTransition(scene, options) {
   let riftSoundStarted = false;
   let suctionSoundStarted = false;
   let tunnelEntryElapsed = 0;
+  let tunnelSpeedClockOrigin = 0;
+  let tunnelSpeedClockInitialized = false;
+  let tunnelTravelDuration = TUNNEL_TRAVEL_DURATION;
   let previousTunnelTicYaw = 0;
   let previousTunnelTicPitch = 0;
   let nextVideoChangeIndex = 0;
@@ -189,13 +205,21 @@ export function createIdyllTunnelTransition(scene, options) {
     const riftFormation = smoothstep((elapsed - RIFT_FORM_START) / (IDYLL_TRAVEL_DURATION - RIFT_FORM_START));
     const tunnelReveal = smoothstep((elapsed - RIFT_TUNNEL_REVEAL_START) / (IDYLL_TRAVEL_DURATION - RIFT_TUNNEL_REVEAL_START));
     const tunnelElapsed = elapsed - TUNNEL_START;
-    const tunnelTime = BABYLON.Scalar.Clamp(tunnelElapsed, 0, TUNNEL_DURATION);
+    const tunnelClock = Math.max(0, tunnelElapsed);
     const hasReachedTunnelTimeline = elapsed >= TUNNEL_START;
-    const hasReachedWhiteRoom = tunnelElapsed >= TUNNEL_DURATION;
+    if (hasReachedTunnelTimeline && !tunnelSpeedClockInitialized) {
+      tunnelSpeedClockOrigin = tunnelEntryPrepared ? tunnelEntryElapsed : 0;
+      tunnelTravelDuration = tunnelDurationForSpeedClockOrigin(tunnelSpeedClockOrigin);
+      tunnelSpeedClockInitialized = true;
+    }
+    const tunnelTime = BABYLON.Scalar.Clamp(
+      tunnelTravelTime(tunnelClock, tunnelRoute, riftApproachTime, tunnelSpeedClockOrigin),
+      0,
+      TUNNEL_DURATION,
+    );
+    const hasReachedWhiteRoom = tunnelTime >= TUNNEL_DURATION;
     flashDebug.arm(tunnelElapsed);
-    // This is the exact existing branch that changes the visible route from
-    // normal travel into the final pull toward the White-Room aperture.
-    if (!suctionSoundStarted && finalTunnelTravelTime(tunnelTime) !== tunnelTime) {
+    if (!suctionSoundStarted && tunnelTime >= FINAL_PULL_START) {
       suctionSoundStarted = true;
       options.onSuctionStart?.(tunnelTime, TUNNEL_DURATION);
     }
@@ -210,7 +234,7 @@ export function createIdyllTunnelTransition(scene, options) {
         * riftPullProgress(elapsed - IDYLL_TRAVEL_DURATION, tunnelRoute, riftApproachTime), initialHeading, delta);
     } else if (!hasReachedWhiteRoom) {
       const tunnelRouteTime = tunnelRoute.entryTime
-        + tunnelTravelTime(tunnelTime, tunnelRoute, riftApproachTime);
+        + tunnelTime;
       applyPathTransform(
         root,
         tunnelRoute,
@@ -233,8 +257,14 @@ export function createIdyllTunnelTransition(scene, options) {
       }
     } else {
       activateWhiteRoom(options, root);
-      const whiteElapsed = tunnelElapsed - TUNNEL_DURATION;
-      const releaseStartSpeed = tunnelRoute.normalTunnelSpeed * finalTunnelSpeedMultiplier();
+      const whiteElapsed = tunnelElapsed - tunnelTravelDuration;
+      const releaseStartSpeed = tunnelRoute.normalTunnelSpeed
+        * tunnelTravelSpeedMultiplier(
+          tunnelTravelDuration,
+          tunnelRoute,
+          riftApproachTime,
+          tunnelSpeedClockOrigin,
+        );
       const releaseDistance = BABYLON.Vector3.Distance(tunnelRoute.endPosition, options.whiteRoom.finalPosition);
       const releaseStartSlope = BABYLON.Scalar.Clamp(
         releaseStartSpeed * WHITE_ROOM_ARRIVAL_DURATION / Math.max(releaseDistance, 0.001),
@@ -321,8 +351,24 @@ export function createIdyllTunnelTransition(scene, options) {
       entered: tunnelEntryPrepared,
     });
 
-    debug.update(elapsed, tunnelTime, tunnelRoute, tunnelEntryPrepared, riftFormation, riftApproachTime);
-    flashDebug.capture(tunnelElapsed, tunnelTime, tunnelRoute, riftApproachTime);
+    debug.update(
+      elapsed,
+      tunnelClock,
+      tunnelTime,
+      tunnelRoute,
+      tunnelEntryPrepared,
+      riftFormation,
+      riftApproachTime,
+      tunnelTravelDuration,
+      tunnelSpeedClockOrigin,
+    );
+    flashDebug.capture(
+      tunnelElapsed,
+      tunnelTime,
+      tunnelRoute,
+      riftApproachTime,
+      tunnelTravelDuration,
+    );
   });
 
   return {
@@ -351,6 +397,9 @@ export function createIdyllTunnelTransition(scene, options) {
       riftSoundStarted = false;
       suctionSoundStarted = false;
       tunnelEntryElapsed = 0;
+      tunnelSpeedClockOrigin = 0;
+      tunnelSpeedClockInitialized = false;
+      tunnelTravelDuration = TUNNEL_TRAVEL_DURATION;
       previousTunnelTicYaw = 0;
       previousTunnelTicPitch = 0;
       nextVideoChangeIndex = 0;
@@ -401,14 +450,30 @@ export function createIdyllTunnelTransition(scene, options) {
         if (isInXr) {
           xrCamera = xr.camera;
           xrCamera.parent = root;
-          syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading, riftApproachTime);
+          syncRootToExperienceTime(
+            root,
+            elapsed,
+            tunnelRoute,
+            options.whiteRoom,
+            initialHeading,
+            riftApproachTime,
+            tunnelSpeedClockOrigin,
+          );
           return;
         }
         if (xrCamera) {
           xrCamera.parent = null;
           xrCamera = null;
         }
-        syncRootToExperienceTime(root, elapsed, tunnelRoute, options.whiteRoom, initialHeading, riftApproachTime);
+        syncRootToExperienceTime(
+          root,
+          elapsed,
+          tunnelRoute,
+          options.whiteRoom,
+          initialHeading,
+          riftApproachTime,
+          tunnelSpeedClockOrigin,
+        );
       });
     },
     dispose() {
@@ -646,9 +711,10 @@ function tunnelEntryBlendTime(tunnelTime, route, approachTime) {
   );
 }
 
-function tunnelTravelTime(tunnelTime, route, approachTime) {
+function tunnelTravelTime(tunnelTime, route, approachTime, speedClockOrigin = 0) {
   const entryBlendedTime = tunnelEntryBlendTime(tunnelTime, route, approachTime);
-  return finalTunnelTravelTime(dramaticTunnelTravelTime(entryBlendedTime));
+  return dramaticTunnelTravelTime(speedClockOrigin + entryBlendedTime)
+    - dramaticTunnelTravelTime(speedClockOrigin);
 }
 
 function tunnelEntrySpeedMultiplier(tunnelTime, route, approachTime) {
@@ -663,7 +729,7 @@ function tunnelEntrySpeedMultiplier(tunnelTime, route, approachTime) {
 }
 
 function integratedDramaticSpeed(time) {
-  const clampedTime = Math.min(Math.max(time, 0), FINAL_PULL_START);
+  const clampedTime = Math.min(Math.max(time, 0), TUNNEL_SPEED_KEYS.at(-1).at);
   let distance = 0;
   for (let index = 0; index < TUNNEL_SPEED_KEYS.length - 1; index += 1) {
     const current = TUNNEL_SPEED_KEYS[index];
@@ -685,59 +751,42 @@ function integratedDramaticSpeed(time) {
 }
 
 function dramaticTunnelTravelTime(tunnelTime) {
-  if (tunnelTime >= FINAL_PULL_START) {
-    return tunnelTime;
-  }
-  return integratedDramaticSpeed(tunnelTime) * TUNNEL_SPEED_NORMALIZATION;
+  return integratedDramaticSpeed(tunnelTime);
 }
 
 function dramaticTunnelSpeedMultiplier(tunnelTime) {
-  if (tunnelTime >= FINAL_PULL_START) {
-    return 1;
-  }
   const clampedTime = Math.max(0, tunnelTime);
   for (let index = 0; index < TUNNEL_SPEED_KEYS.length - 1; index += 1) {
     const current = TUNNEL_SPEED_KEYS[index];
     const next = TUNNEL_SPEED_KEYS[index + 1];
     if (clampedTime <= next.at) {
       const progress = (clampedTime - current.at) / (next.at - current.at);
-      return BABYLON.Scalar.Lerp(current.speed, next.speed, smoothstep(progress))
-        * TUNNEL_SPEED_NORMALIZATION;
+      return BABYLON.Scalar.Lerp(current.speed, next.speed, smoothstep(progress));
     }
   }
-  return 1;
+  return TUNNEL_SPEED_KEYS.at(-1).speed;
 }
 
-function tunnelTravelSpeedMultiplier(tunnelTime, route, approachTime) {
+function tunnelTravelSpeedMultiplier(tunnelTime, route, approachTime, speedClockOrigin = 0) {
   const entryBlendedTime = tunnelEntryBlendTime(tunnelTime, route, approachTime);
-  const dramaticTime = dramaticTunnelTravelTime(entryBlendedTime);
   return tunnelEntrySpeedMultiplier(tunnelTime, route, approachTime)
-    * dramaticTunnelSpeedMultiplier(entryBlendedTime)
-    * finalTunnelSpeedMultiplier(dramaticTime);
+    * dramaticTunnelSpeedMultiplier(speedClockOrigin + entryBlendedTime);
 }
 
-/**
- * Keeps the route endpoint and the sixty-second tunnel clock fixed while
- * redistributing only the last seven seconds into a strong forward pull.
- * It is continuous at both ends: normal travel becomes a local attraction
- * instead of reviving any of the old global-entry suction states.
- */
-function finalTunnelTravelTime(tunnelTime) {
-  if (tunnelTime <= FINAL_PULL_START) {
-    return tunnelTime;
+function timeAtDramaticDistance(distance) {
+  let lower = 0;
+  let upper = TUNNEL_SPEED_KEYS.at(-1).at;
+  for (let iteration = 0; iteration < 64; iteration += 1) {
+    const middle = (lower + upper) * 0.5;
+    if (integratedDramaticSpeed(middle) < distance) lower = middle;
+    else upper = middle;
   }
-  const progress = BABYLON.Scalar.Clamp((tunnelTime - FINAL_PULL_START) / FINAL_PULL_DURATION, 0, 1);
-  const pulledProgress = progress + FINAL_PULL_STRENGTH * (progress ** 5 - progress ** 3);
-  return FINAL_PULL_START + FINAL_PULL_DURATION * pulledProgress;
+  return (lower + upper) * 0.5;
 }
 
-function finalTunnelSpeedMultiplier(tunnelTime = TUNNEL_DURATION) {
-  if (tunnelTime <= FINAL_PULL_START) {
-    return 1;
-  }
-  const progress = BABYLON.Scalar.Clamp((tunnelTime - FINAL_PULL_START) / FINAL_PULL_DURATION, 0, 1);
-  // Derivative of finalTunnelTravelTime.
-  return 1 + FINAL_PULL_STRENGTH * (5 * progress ** 4 - 3 * progress ** 2);
+function tunnelDurationForSpeedClockOrigin(speedClockOrigin) {
+  const startingDistance = dramaticTunnelTravelTime(speedClockOrigin);
+  return timeAtDramaticDistance(startingDistance + TUNNEL_DURATION) - speedClockOrigin;
 }
 
 function finalReleaseProgress(value, initialSlope) {
@@ -1129,7 +1178,15 @@ function isolatePreviousWorld(options) {
   options.previousWorldLights.forEach((light) => light.setEnabled(false));
 }
 
-function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initialHeading, riftApproachTime) {
+function syncRootToExperienceTime(
+  root,
+  elapsed,
+  tunnelRoute,
+  whiteRoom,
+  initialHeading,
+  riftApproachTime,
+  speedClockOrigin,
+) {
   if (elapsed < IDYLL_TRAVEL_DURATION) {
     applyPathTransform(root, tunnelRoute, riftApproachTime * calmTravelProgress(elapsed / IDYLL_TRAVEL_DURATION), initialHeading, 0);
     return;
@@ -1140,11 +1197,17 @@ function syncRootToExperienceTime(root, elapsed, tunnelRoute, whiteRoom, initial
     return;
   }
   const tunnelTime = elapsed - TUNNEL_START;
-  if (tunnelTime < TUNNEL_DURATION) {
+  const tunnelProgressTime = tunnelTravelTime(
+    tunnelTime,
+    tunnelRoute,
+    riftApproachTime,
+    speedClockOrigin,
+  );
+  if (tunnelProgressTime < TUNNEL_DURATION) {
     applyPathTransform(
       root,
       tunnelRoute,
-      tunnelRoute.entryTime + tunnelTravelTime(tunnelTime, tunnelRoute, riftApproachTime),
+      tunnelRoute.entryTime + tunnelProgressTime,
       initialHeading,
       0,
     );
@@ -1753,7 +1816,7 @@ function createTunnelFlashDebug(scene, options, root, rift) {
     report.style.display = "block";
     actions.style.display = "flex";
   };
-  const drawOverlay = (tunnelTime, tunnelRoute, riftApproachTime) => {
+  const drawOverlay = (tunnelElapsed, tunnelProgressTime, tunnelRoute, tunnelDuration) => {
     const counts = { idyll: 0, rift: 0, tunnel: 0, whiteRoom: 0 };
     scene.meshes.forEach((mesh) => {
       if (!mesh.isEnabled()) return;
@@ -1763,7 +1826,7 @@ function createTunnelFlashDebug(scene, options, root, rift) {
     });
     const activeLights = scene.lights.filter((light) => light.isEnabled());
     const cameraPosition = scene.activeCamera?.globalPosition ?? root.getAbsolutePosition();
-    const tunnelDistance = tunnelTravelTime(tunnelTime, tunnelRoute, riftApproachTime) * tunnelRoute.normalTunnelSpeed;
+    const tunnelDistance = tunnelProgressTime * tunnelRoute.normalTunnelSpeed;
     const shownSinceEntry = active ? sinceEntry() : finished ? captureEndedAt : 0;
     status.textContent = [
       "TUNNEL DEBUG",
@@ -1777,7 +1840,8 @@ function createTunnelFlashDebug(scene, options, root, rift) {
       `active lights: ${activeLights.length} (${activeLights.map((light) => light.name).join(", ") || "none"})`,
       `scene clearColor: ${colorValue(scene.clearColor)}`,
       `camera position: ${cameraPosition.x.toFixed(2)}, ${cameraPosition.y.toFixed(2)}, ${cameraPosition.z.toFixed(2)}`,
-      `tunnel progress: ${tunnelTime.toFixed(3)} s / ${TUNNEL_DURATION} s (${tunnelDistance.toFixed(2)} m)`,
+      `tunnel clock: ${tunnelElapsed.toFixed(3)} s / ${tunnelDuration.toFixed(3)} s`,
+      `tunnel progress: ${tunnelProgressTime.toFixed(3)} / ${TUNNEL_DURATION} (${tunnelDistance.toFixed(2)} m)`,
       `last event: ${lastEvent}`,
       finished ? "capture complete (-2.0 s to +3.0 s)" : "capture armed for -2.0 s to +3.0 s",
     ].join("\n");
@@ -1845,7 +1909,7 @@ function createTunnelFlashDebug(scene, options, root, rift) {
         frame,
       })}`);
     },
-    capture(tunnelElapsed, tunnelTime, tunnelRoute, riftApproachTime) {
+    capture(tunnelElapsed, tunnelTime, tunnelRoute, riftApproachTime, tunnelDuration) {
       if (!active && !finished) return;
       if (active) {
         timelineMs = tunnelElapsed * 1000;
@@ -1882,7 +1946,7 @@ function createTunnelFlashDebug(scene, options, root, rift) {
         detectUnexpectedIdyll();
         if (sinceEntry() >= FLASH_DEBUG_POST_ENTRY_MS) endRequested = true;
       }
-      drawOverlay(tunnelTime, tunnelRoute, riftApproachTime);
+      drawOverlay(tunnelElapsed, tunnelTime, tunnelRoute, tunnelDuration);
     },
     captureRenderedFrame,
     dispose() {
@@ -1902,10 +1966,20 @@ function createDebugPanel() {
   panel.className = "tunnel-debug-panel";
   document.body.append(panel);
   return {
-    update(experienceTime, tunnelTime, tunnelRoute, hasEnteredTunnel, riftFormation, riftApproachTime) {
-      const phase = getTunnelPhase(tunnelTime);
-      const inWhiteRoom = experienceTime >= TUNNEL_START + TUNNEL_DURATION;
-      const inTunnel = hasEnteredTunnel && tunnelTime < TUNNEL_DURATION;
+    update(
+      experienceTime,
+      tunnelElapsed,
+      tunnelProgressTime,
+      tunnelRoute,
+      hasEnteredTunnel,
+      riftFormation,
+      riftApproachTime,
+      tunnelDuration,
+      speedClockOrigin,
+    ) {
+      const phase = getTunnelPhase(tunnelProgressTime);
+      const inWhiteRoom = tunnelProgressTime >= TUNNEL_DURATION;
+      const inTunnel = hasEnteredTunnel && !inWhiteRoom;
       const controller = inWhiteRoom
         ? "white room"
         : inTunnel
@@ -1917,18 +1991,25 @@ function createDebugPanel() {
             : "idyll travel";
       const currentSpeed = inTunnel
         ? tunnelRoute.normalTunnelSpeed
-          * tunnelTravelSpeedMultiplier(tunnelTime, tunnelRoute, riftApproachTime)
+          * tunnelTravelSpeedMultiplier(
+            tunnelElapsed,
+            tunnelRoute,
+            riftApproachTime,
+            speedClockOrigin,
+          )
         : 0;
       panel.textContent = [
         `Experience: ${experienceTime.toFixed(1)} s`,
-        `Tunnel: ${tunnelTime.toFixed(1)} / ${TUNNEL_DURATION} s`,
+        `Tunnel clock: ${tunnelElapsed.toFixed(1)} / ${tunnelDuration.toFixed(1)} s`,
+        `Tic/speed clock: ${(tunnelElapsed + speedClockOrigin).toFixed(1)} s`,
+        `Tunnel progress: ${tunnelProgressTime.toFixed(1)} / ${TUNNEL_DURATION}`,
         `Controller: ${controller}`,
         `Speed: ${currentSpeed.toFixed(2)} / ${tunnelRoute.normalTunnelSpeed.toFixed(2)} m/s`,
         `Rift: ${(riftFormation * 100).toFixed(0)} %`,
         `Phase: ${phase.id}`,
-        `Progress: ${(tunnelTime / TUNNEL_DURATION * 100).toFixed(0)} %`,
-        `Tunnel path: ${(inTunnel ? tunnelTravelTime(tunnelTime, tunnelRoute, riftApproachTime) * tunnelRoute.normalTunnelSpeed : 0).toFixed(1)} m`,
-        `Diameter: ${getTunnelDiameter(tunnelTime).toFixed(2)} m`,
+        `Progress: ${(tunnelProgressTime / TUNNEL_DURATION * 100).toFixed(0)} %`,
+        `Tunnel path: ${(inTunnel ? tunnelProgressTime * tunnelRoute.normalTunnelSpeed : 0).toFixed(1)} m`,
+        `Diameter: ${getTunnelDiameter(tunnelProgressTime).toFixed(2)} m`,
       ].join("\n");
     },
     dispose() {
