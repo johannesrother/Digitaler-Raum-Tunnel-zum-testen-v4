@@ -45,6 +45,7 @@ export async function createIdyllScene(
   // its real route before the transition snapshots the world mesh set.
   dreamyIdyll.extendAlongTunnelRoute(tunnel.route);
   const idyllDesaturation = createIdyllDesaturation(dreamyIdyll.world);
+  const idyllTwilight = createIdyllTwilightState(scene, dreamyIdyll, idyllDesaturation);
   clearTunnelTerrain(
     [
       environment.terrain.terrain,
@@ -71,6 +72,9 @@ export async function createIdyllScene(
     onActivate: onWhiteRoomSoundStarted,
     onFadeStart: () => {
       transition.reset({ preserveWhiteRoomEnding: true });
+      // The image is still completely white here. Prepare the returning world
+      // before lowering that white layer so no warm idyll frame can leak in.
+      idyllTwilight.activate();
       suctionWhiteFade.returnToIdyll(0);
     },
     onFadeProgress: (progress) => suctionWhiteFade.returnToIdyll(progress),
@@ -118,6 +122,7 @@ export async function createIdyllScene(
     onExperienceReset: ({ preserveWhiteRoomEnding = false } = {}) => {
       preRiftLightDisturbance?.reset();
       if (!preserveWhiteRoomEnding) {
+        idyllTwilight.reset();
         suctionWhiteFade.reset();
         whiteRoomTone.deactivate();
       }
@@ -141,6 +146,7 @@ export async function createIdyllScene(
     environment,
     dreamyIdyll,
     idyllDesaturation,
+    idyllTwilight,
     preRiftLightDisturbance,
     desktopCamera,
     tunnel,
@@ -155,6 +161,75 @@ export async function createIdyllScene(
   };
 
   return scene;
+}
+
+/**
+ * A lightweight end-state grade for the already loaded idyll. It only changes
+ * existing light, fog, environment and sky-material values, so desktop and XR
+ * share the exact same look without an additional postprocess or render pass.
+ */
+function createIdyllTwilightState(scene, dreamyIdyll, idyllDesaturation) {
+  const fill = dreamyIdyll.lights.find((light) => light.name === "dreamy-idyll-soft-fill");
+  const sun = dreamyIdyll.lights.find((light) => light.name === "dreamy-idyll-late-afternoon-sun");
+  const skyMaterial = dreamyIdyll.sky.sky.material;
+  const original = {
+    environmentIntensity: scene.environmentIntensity,
+    ambientColor: scene.ambientColor.clone(),
+    fogColor: scene.fogColor.clone(),
+    fogDensity: scene.fogDensity,
+    saturation: idyllDesaturation.saturation,
+    fillIntensity: fill?.intensity,
+    fillDiffuse: fill?.diffuse?.clone(),
+    fillGroundColor: fill?.groundColor?.clone(),
+    sunIntensity: sun?.intensity,
+    sunDiffuse: sun?.diffuse?.clone(),
+    skyEmissive: skyMaterial?.emissiveColor?.clone(),
+  };
+  let active = false;
+
+  return {
+    get active() { return active; },
+    activate() {
+      active = true;
+      scene.environmentIntensity = 0.23;
+      scene.ambientColor.copyFrom(BABYLON.Color3.FromHexString("#101b2c"));
+      scene.fogColor.copyFrom(BABYLON.Color3.FromHexString("#8498ad"));
+      scene.fogDensity = 0.0125;
+      idyllDesaturation.setSaturation(0.72);
+      if (fill) {
+        fill.intensity = 0.46;
+        fill.diffuse.copyFrom(BABYLON.Color3.FromHexString("#9fb9d2"));
+        fill.groundColor.copyFrom(BABYLON.Color3.FromHexString("#42566a"));
+      }
+      if (sun) {
+        sun.intensity = 0.62;
+        sun.diffuse.copyFrom(BABYLON.Color3.FromHexString("#9bb6db"));
+      }
+      if (skyMaterial?.emissiveColor) {
+        skyMaterial.emissiveColor.copyFrom(BABYLON.Color3.FromHexString("#91a6bd"));
+      }
+    },
+    reset() {
+      active = false;
+      scene.environmentIntensity = original.environmentIntensity;
+      scene.ambientColor.copyFrom(original.ambientColor);
+      scene.fogColor.copyFrom(original.fogColor);
+      scene.fogDensity = original.fogDensity;
+      idyllDesaturation.setSaturation(original.saturation);
+      if (fill) {
+        fill.intensity = original.fillIntensity;
+        fill.diffuse.copyFrom(original.fillDiffuse);
+        fill.groundColor.copyFrom(original.fillGroundColor);
+      }
+      if (sun) {
+        sun.intensity = original.sunIntensity;
+        sun.diffuse.copyFrom(original.sunDiffuse);
+      }
+      if (skyMaterial?.emissiveColor && original.skyEmissive) {
+        skyMaterial.emissiveColor.copyFrom(original.skyEmissive);
+      }
+    },
+  };
 }
 
 function createMeadowRiftEntrance() {

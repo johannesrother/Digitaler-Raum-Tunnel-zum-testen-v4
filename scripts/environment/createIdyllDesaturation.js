@@ -86,6 +86,7 @@ export function createIdyllDesaturation(world) {
   return {
     get saturation() { return state.saturation; },
     update(tunnelTime) { state.saturation = getIdyllSaturation(tunnelTime); },
+    setSaturation(value) { state.saturation = BABYLON.Scalar.Clamp(value, 0, 1); },
     reset() { state.saturation = 1; },
   };
 }
